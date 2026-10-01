@@ -38,6 +38,18 @@ WATERNEWS_DEMO=1 python app.py   # 데모 모드: 외부 API 없이 가상 데�
 ```
 Windows PowerShell 데모 모드: `$env:WATERNEWS_DEMO="1"; python app.py`
 
+### 간편 실행 · 자동 업데이트 (권장)
+`git clone` 으로 받은 폴더라면 **`start.bat` 더블클릭**(Mac: `./start.sh`) 한 번으로
+① GitHub 최신 코드 받기 → ② 바뀐 경우에만 화면 재빌드 → ③ 서버 실행 → ④ 브라우저 열기가 자동으로 진행됩니다.
+업데이트만 하려면 `update.bat` 을 실행하세요. `data` 폴더(인증키·설정)는 git 관리 대상이 아니라 업데이트해도 유지됩니다.
+
+처음 한 번 설치 (Git 필요: https://git-scm.com/download/win):
+```
+cd C:\
+git clone -b claude/optimistic-brown-r9962u https://github.com/viaalice00-cpu/waterNews.git waterNews
+```
+PC를 켤 때 자동 실행하려면 `Win + R` → `shell:startup` 폴더에 `start.bat` 의 바로가기를 넣으세요.
+
 ### (개발용) 화면 수정하며 실시간 반영
 터미널 2개를 사용합니다.
 ```bash
