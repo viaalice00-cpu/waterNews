@@ -7,18 +7,45 @@
 | 뉴스 | 구글 뉴스(RSS), 네이버 뉴스 검색 API | 키워드 · 기간 · 지역 타겟팅 조회, 예약 키워드 자동 조회 |
 | 재난문자 | 행정안전부_긴급재난문자 (재난안전데이터 공유플랫폼 `DSSP-IF-00247`) | 실시간 폴링 + 브라우저 즉시 알림, 기간 조회 |
 
-Python 3.9 이상 **표준 라이브러리만** 사용하므로 별도 설치(pip)가 필요 없습니다.
+- **화면(프론트엔드)**: React 19 + Vite (`web/`)
+- **서버(백엔드)**: Python 3.9 이상 표준 라이브러리 (`app.py`, `waternews/`) — API 연계·실시간 폴링 담당, pip 설치 불필요
 
 ## 실행
 
+### 준비물
+- [Python 3.9 이상](https://www.python.org/downloads/) (Windows 설치 시 "Add Python to PATH" 체크)
+- [Node.js 20.19 이상 (LTS)](https://nodejs.org/) — React 화면 빌드용
+
+### 1) 처음 한 번: React 화면 빌드
 ```bash
-python app.py                    # http://127.0.0.1:8080
+cd web
+npm install
+npm run build        # web/dist 생성
+cd ..
+```
+
+### 2) 서버 실행
+```bash
+python app.py        # → 브라우저에서 http://127.0.0.1:8080 접속
+```
+Python 서버가 API와 빌드된 React 화면(`web/dist`)을 함께 제공합니다. 화면 코드를 수정했다면 `npm run build`를 다시 실행하세요.
+
+옵션:
+```bash
 python app.py --port 9000        # 포트 변경
 python app.py --host 0.0.0.0     # 내부망 다른 PC에서 접속 허용 (인증키 노출에 유의)
 WATERNEWS_DEMO=1 python app.py   # 데모 모드: 외부 API 없이 가상 데이터로 화면 확인
 ```
-
 Windows PowerShell 데모 모드: `$env:WATERNEWS_DEMO="1"; python app.py`
+
+### (개발용) 화면 수정하며 실시간 반영
+터미널 2개를 사용합니다.
+```bash
+# 터미널 1 — API 서버
+python app.py
+# 터미널 2 — React 개발 서버 (저장 시 자동 새로고침)
+cd web && npm run dev            # → http://localhost:5173 접속 (/api 는 8080으로 자동 전달)
+```
 
 ## 화면 구성
 
@@ -103,5 +130,8 @@ waternews/monitor.py    재난문자 실시간 폴링, 예약 키워드 뉴스 �
 waternews/settings.py   환경설정 저장 · 인증키 마스킹
 waternews/defaults.py   기본 키워드 · 유역별 지자체 목록
 waternews/demo.py       데모 모드 가상 데이터
-static/                 웹 화면 (HTML/CSS/JS)
+web/                    React 화면 (Vite)
+  src/App.jsx           탭 · 실시간 이벤트(SSE) · 알림
+  src/components/       Dashboard, DisasterTab, NewsTab, SettingsTab, Tags
+  dist/                 빌드 결과 (npm run build, git 제외)
 ```

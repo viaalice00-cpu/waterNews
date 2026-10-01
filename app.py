@@ -21,7 +21,7 @@ from waternews.monitor import Monitor, enabled_basin_ids, is_alert, matcher_for
 from waternews.net import now_kst
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-STATIC = os.path.join(ROOT, "static")
+STATIC = os.path.join(ROOT, "web", "dist")   # React 빌드 결과 (cd web && npm run build)
 DEMO = os.environ.get("WATERNEWS_DEMO") == "1"
 MAX_BODY = 1_000_000
 
@@ -82,10 +82,22 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(raw.decode("utf-8") or "{}")
 
     def _static(self, path):
+        if not os.path.isfile(os.path.join(STATIC, "index.html")):
+            body = ("<meta charset='utf-8'><h3>화면(React)이 아직 빌드되지 않았습니다.</h3>"
+                    "<p>터미널에서 <code>cd web &amp;&amp; npm install &amp;&amp; npm run build</code> 실행 후 "
+                    "새로고침하세요.</p>").encode("utf-8")
+            self.send_response(503)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         rel = "index.html" if path in ("", "/") else path.lstrip("/")
         full = os.path.realpath(os.path.join(STATIC, rel))
         if not full.startswith(os.path.realpath(STATIC) + os.sep) or not os.path.isfile(full):
-            return self._error("not found", 404)
+            if "." in os.path.basename(path):
+                return self._error("not found", 404)
+            full = os.path.join(STATIC, "index.html")   # SPA 경로는 index.html 로
         ctype = mimetypes.guess_type(full)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript",):
             ctype += "; charset=utf-8"
@@ -94,7 +106,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
+        # 빌드 파일명에 해시가 붙는 assets/ 는 장기 캐시, index.html 은 매번 확인
+        cache = "public, max-age=31536000, immutable" if "/assets/" in full.replace(os.sep, "/") else "no-cache"
+        self.send_header("Cache-Control", cache)
         self.end_headers()
         self.wfile.write(body)
 
