@@ -118,6 +118,9 @@ main { padding: 16px 20px 80px; max-width: 1400px; margin: 0 auto; }
 .tag.step-긴급재난 { color: var(--danger); }
 .tag.step-안전안내 { color: var(--muted); }
 .tag.kw { color: var(--warn); }
+.tag.excluded { color: var(--muted); border-style: dashed; font-weight: 500; }
+.table tr.excluded td { opacity: .6; }
+.table tr.excluded .title-cell a { text-decoration: line-through; }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
 .badge.warn { background: var(--warn-bg); color: var(--warn); }
 mark { background: color-mix(in srgb, #ffd54f 60%, transparent); color: inherit; padding: 0 1px; border-radius: 2px; }

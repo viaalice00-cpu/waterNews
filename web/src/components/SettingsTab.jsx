@@ -3,7 +3,7 @@ import { api, fmtTime, post, splitList } from "../utils.js";
 
 const EMPTY_SECRETS = { serviceKey: "", clientId: "", clientSecret: "" };
 
-function KeywordEditor({ keywords, onChange }) {
+function KeywordEditor({ keywords, onChange, placeholder = "키워드 입력 후 Enter (쉼표로 여러 개)" }) {
   const [input, setInput] = useState("");
   const add = () => {
     onChange([...keywords, ...splitList(input).filter((k) => !keywords.includes(k))]);
@@ -19,7 +19,7 @@ function KeywordEditor({ keywords, onChange }) {
           </span>
         ))}
       </div>
-      <input type="text" size={28} placeholder="키워드 입력 후 Enter (쉼표로 여러 개)" value={input}
+      <input type="text" size={28} placeholder={placeholder} value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
       <button type="button" className="btn" onClick={add}>추가</button>
@@ -116,6 +116,7 @@ export default function SettingsTab({ settings, toast, onSaved }) {
       },
       alerts: draft.alerts,
       keywords: draft.keywords,
+      excludeKeywords: draft.excludeKeywords,
       basins: draft.basins,
     };
     if (secrets.serviceKey.trim()) payload.safetydata.serviceKey = secrets.serviceKey.trim();
@@ -236,6 +237,17 @@ export default function SettingsTab({ settings, toast, onSaved }) {
       <div className="card">
         <div className="card-head"><h2>조회 예약 키워드</h2><span className="muted small">뉴스 검색 기본값 · 재난문자 키워드 강조 · 예약 조회에 사용</span></div>
         <KeywordEditor keywords={draft.keywords} onChange={setTop("keywords")} />
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h2>뉴스 제외 키워드</h2><span className="muted small">동음이의어 오탐 제외 (예: 단수 공천·단수 임명)</span></div>
+        <p className="muted small">
+          기사 제목·요약에 아래 단어가 있으면 조회 결과와 알림에서 제외합니다. 단, 상수도·수돗물·급수·정수장·누수 등
+          상수도 맥락 단어가 함께 있으면 실제 단수 기사로 보고 제외하지 않습니다. 제외된 기사는 뉴스 조회의
+          "제외된 기사 보기"로 확인할 수 있습니다.
+        </p>
+        <KeywordEditor keywords={draft.excludeKeywords} onChange={setTop("excludeKeywords")}
+          placeholder="제외할 단어 입력 후 Enter (예: 공천, 당협)" />
       </div>
 
       <div className="card">

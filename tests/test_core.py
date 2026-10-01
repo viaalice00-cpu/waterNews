@@ -7,7 +7,7 @@ from email.utils import format_datetime
 from datetime import datetime
 
 from waternews import disaster, news, settings
-from waternews.classify import RegionMatcher, classify, disaster_pattern, news_term
+from waternews.classify import RegionMatcher, classify, disaster_pattern, exclusion_hits, news_term
 from waternews.defaults import DEFAULT_SETTINGS
 from waternews.net import KST
 
@@ -112,6 +112,26 @@ class ClassifyTest(unittest.TestCase):
         self.assertFalse(m.match_news("예산 편성 회의"))   # 예산군은 전체 명칭만
 
 
+class ExclusionTest(unittest.TestCase):
+    EX = DEFAULT_SETTINGS["excludeKeywords"]
+
+    def test_political_homonym_excluded(self):
+        hits = exclusion_hits('국민의힘 대전·충남 사고당협 단수 임명도 제외…"추가 논의"', self.EX)
+        self.assertIn("당협", hits)
+        self.assertIn("단수 임명", hits)
+        self.assertTrue(exclusion_hits("민주당 대전 유성을 단수공천 확정", self.EX))
+        self.assertTrue(exclusion_hits("바둑 신예, 단수 묘수로 역전승", self.EX))
+
+    def test_real_outage_kept(self):
+        self.assertEqual(exclusion_hits("정읍시 시기동 일대 단수…급수차 투입", self.EX), [])
+        # 정치인이 등장해도 상수도 맥락이 있으면 유지
+        self.assertEqual(exclusion_hits("대전 단수 사태에 국민의힘 시의원 '수돗물 공급 대책' 촉구", self.EX), [])
+
+    def test_custom_list(self):
+        self.assertEqual(exclusion_hits("단수 임명 논란", []), [])
+        self.assertEqual(exclusion_hits("단수 임명 논란", ["임명"]), ["임명"])
+
+
 class SettingsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -148,6 +168,12 @@ class SettingsTest(unittest.TestCase):
         self.assertTrue(s["basins"][1]["id"])
         self.assertEqual(s["safetydata"]["pollIntervalSec"], 30)
 
+    def test_exclude_keywords_update(self):
+        s = settings.load()
+        self.assertIn("공천", s["excludeKeywords"])   # 기존 설정 파일에도 기본값이 채워짐
+        s = settings.apply_update(s, {"excludeKeywords": ["공천", " 당협 ", "공천"]})
+        self.assertEqual(s["excludeKeywords"], ["공천", "당협"])
+
 
 class NewsTest(unittest.TestCase):
     def test_google_query(self):
@@ -165,6 +191,8 @@ class NewsTest(unittest.TestCase):
                              f"<pubDate>{pub}</pubDate><source url='x'>전북일보</source></item>"
                              f"<item><title>서울 단수 소식 - A</title><link>https://g/2</link>"
                              f"<pubDate>{pub}</pubDate><source url='x'>A</source></item>"
+                             f"<item><title>국민의힘 대전·충남 사고당협 단수 임명도 제외 - B</title><link>https://g/3</link>"
+                             f"<pubDate>{pub}</pubDate><source url='x'>A</source></item>"
                              f"</channel></rss>").encode()
             return 200, json.dumps({"total": 2, "items": [
                 {"title": "<b>정읍시</b> 송수관 파열로 단수", "originallink": "https://www.jjan.kr/1",
@@ -178,8 +206,12 @@ class NewsTest(unittest.TestCase):
         res = news.search_news(s, ["단수"], date(2026, 9, 24), date(2026, 9, 30),
                                ["google", "naver"], m, getter=getter)
         self.assertEqual(res["errors"], [])
-        self.assertEqual(len(res["items"]), 1)
-        it = res["items"][0]
+        self.assertEqual(res["excludedCount"], 1)
+        kept = [i for i in res["items"] if not i["excludedBy"]]
+        self.assertEqual(len(kept), 1)
+        dropped = [i for i in res["items"] if i["excludedBy"]][0]
+        self.assertEqual(dropped["categories"], [])
+        it = kept[0]
         self.assertEqual(sorted(it["sources"]), ["google", "naver"])
         self.assertEqual(it["press"], "전북일보")
         self.assertIn("outage", it["categories"])

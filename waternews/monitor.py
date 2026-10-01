@@ -156,6 +156,7 @@ class Monitor:
             try:
                 res = news.search_news(s, s["keywords"], start, now.date(), s["news"]["sources"],
                                        matcher_for(s), **kwargs)
+                res["items"] = [it for it in res["items"] if not it["excludedBy"]]
                 err = "; ".join(res["errors"]) or None
             except ValueError as e:
                 res, err = {"items": []}, str(e)

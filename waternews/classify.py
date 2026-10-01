@@ -86,6 +86,24 @@ def classify(text, dst_se_nm=None):
     return found
 
 
+# 이 단어가 함께 있으면 제외 키워드가 있어도 상수도 기사로 본다 ('수도'는 수도권 등과 겹쳐 제외)
+STRONG_WATER_TERMS = ["상수도", "수돗물", "급수", "정수장", "취수장", "송수관", "상수관", "수도관",
+                      "배수관", "누수", "배수지", "가압장", "식수", "생수"]
+
+
+def exclusion_hits(text, exclude_words):
+    """동음이의어 오탐 판정. 제외 키워드가 있고 상수도 맥락 단어가 없으면 걸린 제외 키워드 목록을 반환.
+
+    예) '국민의힘 대전·충남 사고당협 단수 임명' → ['당협', '국민의힘', '단수 임명']
+        '정읍시 단수…수돗물 공급 중단, 당협 위원장 현장 방문' → [] (상수도 맥락이 있어 유지)
+    """
+    text = text or ""
+    hits = [w for w in exclude_words or [] if w and w in text]
+    if not hits or any(t in text for t in STRONG_WATER_TERMS):
+        return []
+    return hits
+
+
 def keyword_hits(text, keywords):
     text = text or ""
     return [k for k in keywords if k and k in text]

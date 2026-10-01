@@ -15,6 +15,7 @@ export default function NewsTab({ settings }) {
   const [regionInQuery, setRegionInQuery] = useState(true);
   const [unmatched, setUnmatched] = useState(false);
   const [waterOnly, setWaterOnly] = useState(false);
+  const [showExcluded, setShowExcluded] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,9 +40,10 @@ export default function NewsTab({ settings }) {
   };
 
   const items = useMemo(() => {
-    const list = result?.items || [];
-    return waterOnly ? list.filter((n) => n.categories.length) : list;
-  }, [result, waterOnly]);
+    let list = result?.items || [];
+    if (!showExcluded) list = list.filter((n) => !n.excludedBy?.length);
+    return waterOnly ? list.filter((n) => n.categories.length || n.excludedBy?.length) : list;
+  }, [result, waterOnly, showExcluded]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -67,7 +69,8 @@ export default function NewsTab({ settings }) {
   const exportCsv = () => {
     const rows = [["일시", "제목", "언론사", "분류", "유역", "지자체", "출처", "검색어", "링크"]];
     for (const n of items) {
-      rows.push([n.publishedAt, n.title, n.press, n.categories.map((c) => CAT[c]).join("/"),
+      const cat = n.excludedBy?.length ? `제외(${n.excludedBy.join("/")})` : n.categories.map((c) => CAT[c]).join("/");
+      rows.push([n.publishedAt, n.title, n.press, cat,
         [...new Set(n.regions.map((r) => r.basin))].join("/"), n.regions.map((r) => r.region).join("/"),
         n.sources.map((s) => SRC[s]).join("/"), n.queries.join("/"), n.link]);
     }
@@ -118,6 +121,10 @@ export default function NewsTab({ settings }) {
           <label className="check"><input type="checkbox" checked={regionInQuery} onChange={(e) => setRegionInQuery(e.target.checked)} /> 검색어에 지자체명 결합(구글)</label>
           <label className="check"><input type="checkbox" checked={unmatched} onChange={(e) => setUnmatched(e.target.checked)} /> 대상 지역 외 기사 포함</label>
           <label className="check"><input type="checkbox" checked={waterOnly} onChange={(e) => setWaterOnly(e.target.checked)} /> 상수도·풍수해 분류 기사만</label>
+          <label className="check" title="환경설정의 제외 키워드(공천·당협 등)에 걸린 기사">
+            <input type="checkbox" checked={showExcluded} onChange={(e) => setShowExcluded(e.target.checked)} />
+            제외된 기사 보기{result ? ` (${result.excludedCount}건)` : ""}
+          </label>
           <span className="grow" />
           <button type="submit" className="btn primary" disabled={loading}>{loading ? "조회 중…" : "조회"}</button>
           <button type="button" className="btn" disabled={!items.length} onClick={exportCsv}>CSV 저장</button>
@@ -126,7 +133,7 @@ export default function NewsTab({ settings }) {
 
       <p className="muted small">
         {loading ? "구글·네이버 뉴스를 조회하고 있습니다…" : result &&
-          `${result.start} ~ ${result.end} · 키워드 ${result.keywords.join(", ")} · 요청 ${result.requestCount}회 · 수집 ${result.rawCount}건 → 표시 ${items.length}건`}
+          `${result.start} ~ ${result.end} · 키워드 ${result.keywords.join(", ")} · 요청 ${result.requestCount}회 · 수집 ${result.rawCount}건 → 제외 ${result.excludedCount}건 → 표시 ${items.length}건`}
       </p>
       {error && <div className="error-box">{error}</div>}
       {result?.errors.map((e) => <div key={e} className="error-box">{e}</div>)}
@@ -140,13 +147,17 @@ export default function NewsTab({ settings }) {
           <tbody>
             {result && items.length === 0 && <tr><td colSpan={5} className="empty">검색 결과가 없습니다.</td></tr>}
             {items.map((n) => (
-              <tr key={n.id}>
+              <tr key={n.id} className={n.excludedBy?.length ? "excluded" : ""}>
                 <td className="mono">{fmtTime(n.publishedAt)}</td>
                 <td className="title-cell">
                   <a href={n.link} target="_blank" rel="noopener noreferrer"><Highlight text={n.title} words={result.keywords} /></a>
                   {n.description && <div className="desc"><Highlight text={n.description} words={result.keywords} /></div>}
                 </td>
-                <td>{n.categories.length ? <CategoryTags categories={n.categories} /> : <span className="muted small">-</span>}</td>
+                <td>
+                  {n.excludedBy?.length
+                    ? <span className="tag excluded" title="상수도 맥락 단어 없이 제외 키워드가 포함됨">제외: {n.excludedBy.join(", ")}</span>
+                    : n.categories.length ? <CategoryTags categories={n.categories} /> : <span className="muted small">-</span>}
+                </td>
                 <td>{n.regions.length ? <RegionTags regions={n.regions} max={3} /> : <span className="muted small">지역 미확인</span>}</td>
                 <td><div>{n.press}</div>{n.sources.map((s) => <span key={s} className="tag src">{SRC[s] || s}</span>)}</td>
               </tr>

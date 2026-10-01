@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 
-from .classify import classify, keyword_hits
+from .classify import classify, exclusion_hits, keyword_hits
 from .net import KST, FetchError, http_get
 
 GOOGLE_RSS = "https://news.google.com/rss/search"
@@ -174,7 +174,8 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
         it["id"] = key[:80]
         merged[key] = it
 
-    items = []
+    items, excluded = [], 0
+    exclude_words = settings.get("excludeKeywords") or []
     for it in merged.values():
         text = f"{it['title']} {it['description']}"
         it["categories"] = classify(text)
@@ -182,6 +183,12 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
         it["regions"] = matcher.match_news(text) if matcher else []
         if matcher and not it["regions"] and not include_unmatched:
             continue
+        # 제외된 기사도 화면에서 확인할 수 있도록 표시만 하고 목록에는 남긴다
+        it["excludedBy"] = exclusion_hits(text, exclude_words)
+        if it["excludedBy"]:
+            it["categories"] = []
+            excluded += 1
         items.append(it)
     items.sort(key=lambda x: x["publishedAt"], reverse=True)
-    return {"items": items, "errors": errors, "requestCount": len(tasks), "rawCount": len(raw)}
+    return {"items": items, "errors": errors, "requestCount": len(tasks), "rawCount": len(raw),
+            "excludedCount": excluded}

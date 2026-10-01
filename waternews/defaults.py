@@ -8,6 +8,14 @@ SAFETYDATA_DISASTER_MSG_URL = "https://www.safetydata.go.kr/V2/api/DSSP-IF-00247
 
 DEFAULT_KEYWORDS = ["단수", "상수도", "홍수", "누수", "수도관 파열", "침수"]
 
+# 뉴스 제외 키워드: '단수 공천', '단수 임명'처럼 상수도와 무관한 동음이의어 기사를 거른다.
+# 기사에 상수도·수돗물·급수 등 상수도 맥락 단어가 함께 있으면 제외하지 않는다.
+DEFAULT_EXCLUDE_KEYWORDS = [
+    "공천", "단수추천", "단수 추천", "단수 임명", "단수후보", "단수 후보", "경선", "공관위", "당협",
+    "예비후보", "출마", "총선", "지방선거", "국민의힘", "민주당", "조국혁신당",
+    "개혁신당", "정의당", "바둑", "단수형", "복수형", "단수가 높",
+]
+
 # 유역별 대상 지자체. 시(市)·광역시는 '정읍'처럼 핵심 지명으로도 뉴스가 매칭되고,
 # 군·구는 '완주군'처럼 전체 명칭으로만 매칭된다(동음이의어 오탐 방지).
 DEFAULT_BASINS = [
@@ -83,6 +91,7 @@ DEFAULT_SETTINGS = {
         "clientSecret": "",
     },
     "keywords": DEFAULT_KEYWORDS,
+    "excludeKeywords": DEFAULT_EXCLUDE_KEYWORDS,
     "basins": DEFAULT_BASINS,
     "news": {
         "sources": ["google", "naver"],

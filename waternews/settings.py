@@ -150,6 +150,9 @@ def apply_update(current, payload):
     if "keywords" in payload:
         s["keywords"] = _str_list(payload["keywords"], max_len=30, limit=100)
 
+    if "excludeKeywords" in payload:
+        s["excludeKeywords"] = _str_list(payload["excludeKeywords"], max_len=30, limit=200)
+
     if "basins" in payload:
         basins, used = [], set()
         for b in payload["basins"] or []:
