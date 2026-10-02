@@ -18,6 +18,6 @@ if errorlevel 1 ( popd & echo [오류] 화면 빌드 실패 & pause & exit /b 1 
 popd
 
 echo.
-echo 업데이트 완료. (data 폴더의 인증키·설정은 그대로 유지됩니다)
+echo 업데이트 완료. (인증키·설정은 %%APPDATA%%\waterNews 에 있어 그대로 유지됩니다)
 echo 실행 중인 프로그램이 있다면 창을 닫고 start.bat 을 다시 실행하세요.
 pause

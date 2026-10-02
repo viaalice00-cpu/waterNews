@@ -307,3 +307,49 @@ class NaverRateLimitTest(unittest.TestCase):
         stamps.sort()
         gaps = [b - a for a, b in zip(stamps, stamps[1:])]
         self.assertGreaterEqual(min(gaps), 0.045)
+
+
+class DataLocationTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.legacy = os.path.join(self.tmp.name, "program", "data")
+        self.new = os.path.join(self.tmp.name, "appdata", "waterNews")
+        os.makedirs(self.legacy)
+        self._orig = settings.DATA_DIR
+        settings.DATA_DIR = self.new
+
+    def tearDown(self):
+        settings.DATA_DIR = self._orig
+        self.tmp.cleanup()
+
+    def test_default_dir_is_outside_program_folder(self):
+        env = os.environ.pop("WATERNEWS_DATA_DIR", None)
+        try:
+            d = os.path.realpath(settings.default_data_dir())
+            program = os.path.realpath(os.path.dirname(settings.LEGACY_DATA_DIR))
+            self.assertFalse(d.startswith(program + os.sep), d)
+            self.assertTrue(d.endswith("waterNews"))
+        finally:
+            if env is not None:
+                os.environ["WATERNEWS_DATA_DIR"] = env
+
+    def test_migrates_legacy_settings_once_without_overwriting(self):
+        with open(os.path.join(self.legacy, "settings.json"), "w", encoding="utf-8") as f:
+            json.dump({"keywords": ["옛설정"], "safetydata": {"serviceKey": "OLDKEY"}}, f)
+        self.assertEqual(settings.migrate_legacy(self.legacy), ["settings.json"])
+        s = settings.load()
+        self.assertEqual(s["keywords"], ["옛설정"])
+        self.assertEqual(s["safetydata"]["serviceKey"], "OLDKEY")
+        self.assertTrue(os.path.exists(os.path.join(self.legacy, "settings.json")))   # 원본 보존
+        # 새 위치에서 바꾼 설정은 다음 실행 때 이전 파일로 덮이지 않음
+        settings.save(settings.apply_update(s, {"keywords": ["새설정"]}))
+        self.assertEqual(settings.migrate_legacy(self.legacy), [])
+        self.assertEqual(settings.load()["keywords"], ["새설정"])
+
+    def test_corrupted_settings_recover_from_backup(self):
+        s = settings.load()
+        settings.save(settings.apply_update(s, {"keywords": ["첫번째"]}))
+        settings.save(settings.apply_update(settings.load(), {"keywords": ["두번째"]}))
+        with open(os.path.join(self.new, "settings.json"), "w", encoding="utf-8") as f:
+            f.write('{"keywords": ["깨진')      # 저장 도중 전원 차단 등으로 손상
+        self.assertEqual(settings.load()["keywords"], ["첫번째"])

@@ -292,6 +292,10 @@ export default function SettingsTab({ settings, toast, onSaved }) {
         </div>
       </div>
 
+      <p className="muted small">
+        설정·인증키·수집 이력 저장 위치: <code>{settings.dataDir}</code> — 프로그램 폴더 밖에 있어 업데이트·재설치해도 유지됩니다.
+      </p>
+
       <div className="savebar">
         <span className="muted small">{dirty ? "저장되지 않은 변경사항이 있습니다." : ""}</span>
         <button type="button" className="btn" onClick={() => { setDraft(structuredClone(settings)); setSecrets(EMPTY_SECRETS); setDirty(false); }}>되돌리기</button>

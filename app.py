@@ -172,7 +172,8 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------ API 구현
     @staticmethod
     def _settings_view(s):
-        return {**settings_mod.public_view(s), "demo": DEMO, "aiModels": ai.AI_MODELS}
+        return {**settings_mod.public_view(s), "demo": DEMO, "aiModels": ai.AI_MODELS,
+                "dataDir": settings_mod.DATA_DIR}
 
     def _run_analysis(self, q, keep_items=False):
         s = load_settings()
@@ -310,6 +311,10 @@ def main(argv=None):
     p.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     p.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     args = p.parse_args(argv)
+    copied = settings_mod.migrate_legacy()
+    if copied:
+        print(f"이전 설정·데이터를 새 위치로 옮겼습니다: {', '.join(copied)} → {settings_mod.DATA_DIR}", flush=True)
+    print(f"설정·데이터 저장 위치: {settings_mod.DATA_DIR}", flush=True)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     MONITOR.start()

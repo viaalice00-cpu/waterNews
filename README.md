@@ -41,7 +41,7 @@ Windows PowerShell 데모 모드: `$env:WATERNEWS_DEMO="1"; python app.py`
 ### 간편 실행 · 자동 업데이트 (권장)
 `git clone` 으로 받은 폴더라면 **`start.bat` 더블클릭**(Mac: `./start.sh`) 한 번으로
 ① GitHub 최신 코드 받기 → ② 바뀐 경우에만 화면 재빌드 → ③ 서버 실행 → ④ 브라우저 열기가 자동으로 진행됩니다.
-업데이트만 하려면 `update.bat` 을 실행하세요. `data` 폴더(인증키·설정)는 git 관리 대상이 아니라 업데이트해도 유지됩니다.
+업데이트만 하려면 `update.bat` 을 실행하세요. 인증키·설정은 프로그램 폴더 밖(`%APPDATA%\waterNews`)에 저장되어 업데이트해도 유지됩니다.
 
 처음 한 번 설치 (Git 필요: https://git-scm.com/download/win):
 ```
@@ -152,7 +152,17 @@ API 명세(앱에서 사용하는 값):
 | 풍수해 | 홍수, 호우, 폭우, 침수, 범람, 태풍, 산사태, 홍수경보 … |
 
 ## 데이터 저장
-- 설정 및 인증키: `data/settings.json` (git 제외, 파일 권한 600). 화면/API 응답에는 키가 마스킹되어 표시됩니다.
+설정·인증키·수집 이력은 **프로그램 폴더 밖** 사용자 폴더에 저장되어, 업데이트(`git pull`)·ZIP 덮어쓰기·새로 clone 해도 유지됩니다.
+
+| OS | 위치 |
+|---|---|
+| Windows | `%APPDATA%\waterNews` (예: `C:\Users\사용자\AppData\Roaming\waterNews`) |
+| macOS | `~/Library/Application Support/waterNews` |
+| Linux | `~/.local/share/waterNews` |
+
+- 파일: `settings.json`(설정·인증키, 화면에는 마스킹 표시), `settings.json.bak`(직전 설정 백업 — 파일 손상 시 자동 복구), `waternews.db`(사고 분석용 수집 이력)
+- 이전 버전의 `data/` 폴더에 설정이 있으면 첫 실행 때 자동으로 새 위치에 복사됩니다(원본은 그대로 둠).
+- 위치를 바꾸려면 `WATERNEWS_DATA_DIR` 환경변수를 지정하세요. 현재 위치는 환경설정 화면 하단과 서버 시작 메시지에 표시됩니다.
 - 환경변수로도 키 지정 가능: `SAFETYDATA_SERVICE_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`
 - 실시간 재난문자는 메모리에 최근 3일분을 보관합니다.
 

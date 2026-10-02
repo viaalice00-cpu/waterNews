@@ -4,12 +4,52 @@ import copy
 import json
 import os
 import re
+import shutil
+import sys
 import threading
 
 from .defaults import DEFAULT_SETTINGS
 
-DATA_DIR = os.environ.get("WATERNEWS_DATA_DIR") or os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+# 이전 버전의 저장 위치 (프로그램 폴더 안 data/) — 폴더를 새로 받으면 함께 사라지던 위치
+LEGACY_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+
+
+def default_data_dir():
+    """사용자별 데이터 폴더 (프로그램 폴더 밖). 재배포·ZIP 덮어쓰기·새 clone 에도 유지된다.
+
+    Windows: %APPDATA%\\waterNews   macOS: ~/Library/Application Support/waterNews
+    Linux:   $XDG_DATA_HOME/waterNews (기본 ~/.local/share/waterNews)
+    WATERNEWS_DATA_DIR 환경변수로 직접 지정할 수 있다.
+    """
+    if os.environ.get("WATERNEWS_DATA_DIR"):
+        return os.environ["WATERNEWS_DATA_DIR"]
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Roaming")
+    elif sys.platform == "darwin":
+        base = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(base, "waterNews")
+
+
+DATA_DIR = default_data_dir()
+MIGRATE_FILES = ("settings.json", "waternews.db")
+
+
+def migrate_legacy(legacy_dir=None):
+    """이전 위치(data/)의 설정·수집 이력을 새 위치로 복사. 새 위치에 이미 있으면 덮어쓰지 않는다.
+    원본은 지우지 않는다(안전). 복사한 파일 이름 목록을 반환."""
+    legacy_dir = legacy_dir or LEGACY_DATA_DIR
+    if os.path.realpath(legacy_dir) == os.path.realpath(DATA_DIR):
+        return []
+    copied = []
+    for name in MIGRATE_FILES:
+        src, dst = os.path.join(legacy_dir, name), os.path.join(DATA_DIR, name)
+        if os.path.isfile(src) and not os.path.exists(dst):
+            os.makedirs(DATA_DIR, exist_ok=True)
+            shutil.copy2(src, dst)
+            copied.append(name)
+    return copied
 
 SECRET_FIELDS = [("safetydata", "serviceKey"), ("naver", "clientId"), ("naver", "clientSecret"),
                  ("ai", "apiKey")]
@@ -37,12 +77,26 @@ def _merge(base, override):
     return out
 
 
+def _read_stored():
+    """settings.json 을 읽는다. 손상됐으면 직전 백업(settings.json.bak)으로 복구."""
+    for path in (_path(), _path() + ".bak"):
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                if path.endswith(".bak"):
+                    print(f"[설정] {_path()} 이 손상되어 백업에서 복구했습니다.", flush=True)
+                return data
+        except (OSError, ValueError):
+            continue
+    return {}
+
+
 def load():
     with _lock:
-        stored = {}
-        if os.path.exists(_path()):
-            with open(_path(), encoding="utf-8") as f:
-                stored = json.load(f)
+        stored = _read_stored()
         s = _merge(DEFAULT_SETTINGS, stored)
         for (sec, key), env in ENV_FALLBACK.items():
             if not s[sec].get(key) and os.environ.get(env):
@@ -60,6 +114,11 @@ def save(settings):
             os.chmod(tmp, 0o600)
         except OSError:
             pass
+        if os.path.exists(_path()):
+            try:
+                shutil.copy2(_path(), _path() + ".bak")   # 직전 설정 백업
+            except OSError:
+                pass
         os.replace(tmp, _path())
 
 
