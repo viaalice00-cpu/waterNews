@@ -101,6 +101,11 @@ DEFAULT_SETTINGS = {
         "scheduleIntervalMin": 30,
         "scheduleLookbackHours": 24,
     },
+    "ai": {
+        # 선택 기능: 사고 분석의 AI 브리핑 (pip install anthropic 필요)
+        "apiKey": "",
+        "model": "claude-opus-5-5",
+    },
     "alerts": {
         "waterOnly": True,          # 상수도·단수·풍수해 관련 재난문자만 알림
     },

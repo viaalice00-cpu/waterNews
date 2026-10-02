@@ -119,6 +119,30 @@ API 명세(앱에서 사용하는 값):
 - 제외된 기사는 뉴스 조회의 **"제외된 기사 보기"** 를 켜면 취소선과 함께 어떤 단어 때문에 제외됐는지 표시
 - 오탐이 또 보이면 환경설정 → 뉴스 제외 키워드에 단어를 추가하세요
 
+## 사고 분석 (수도사고 요약·맥락 분석)
+
+**사고 분석** 탭에서 수도사고(단수·관로 파열·누수·수질 이상·침수 등)를 4단계로 분석합니다.
+
+| 단계 | 내용 |
+|---|---|
+| 1. 실시간 데이터 수집 | 재난문자 실시간 조회·예약 키워드 뉴스·뉴스 조회 결과 중 상수도/풍수해 항목을 `data/waternews.db`에 자동 누적(90일 보관, 제외 키워드 기사 제외). **지금 수집** 버튼으로 즉시 수집 |
+| 2. 이해 영역 맥락 카운팅 | 사고유형·원인·피해영향·대응조치·여론이해관계자 5개 영역의 맥락 태그 빈도 (예: 노후 관로, 비상급수, 의회·정치권) |
+| 3. 맥락 군집 요약 브리핑 | 같은 지역에서 48시간 내 이어진 같은 유형의 보도·문자를 하나의 사건으로 묶어 심각도·상태(발생/대응 중/복구 완료/소강)와 규칙 기반 요약 제공. 선택적으로 **AI 브리핑** |
+| 4. 사건 일지 & 인사이트 | 사건별 시간순 일지(발생→확산→대응→여론→복구)와 주의 신호(장기화, 여론 악화, 대규모 피해, 반복 발생, 공식 안내 누락 등) |
+
+분석 규칙(맥락 사전, 반대 의미 표현, 군집 기준)은 `waternews/analysis.py` 상단에서 조정할 수 있습니다.
+
+### AI 브리핑 (선택)
+사건별로 상황 요약·경과·쟁점·대응 시사점·확인 필요 사항을 보고서 문체로 작성합니다.
+1. `pip install anthropic`
+2. [Anthropic Console](https://console.anthropic.com/)에서 API 키 발급 → 환경설정 → **AI 브리핑** 에 입력 (또는 `ANTHROPIC_API_KEY` 환경변수)
+3. 사고 분석 탭의 사건 카드에서 **AI 브리핑 생성**
+
+- 기본 모델은 Claude Opus 5.5이며 환경설정에서 Sonnet 5.5 / Haiku 4.5로 바꿀 수 있습니다.
+- 생성 시 해당 사건의 뉴스 제목·요약과 재난문자 내용이 Claude API로 전송되며 사용료가 발생합니다. 같은 사건은 새 기사가 추가될 때까지 결과를 재사용합니다.
+- 안전 정책상 응답이 거절되면 다른 모델로 자동 재시도하는 서버측 대체(fallback) 옵션이 켜져 있습니다.
+- 키가 없거나 SDK가 설치되지 않아도 규칙 기반 분석은 그대로 동작합니다.
+
 ## 분류 기준 (`waternews/classify.py`)
 
 | 분류 | 주요 단어 |
@@ -146,11 +170,14 @@ waternews/disaster.py   긴급재난문자 API 호출 · 응답 파싱 · 기간
 waternews/news.py       구글 뉴스 RSS · 네이버 뉴스 API · 통합/중복 제거
 waternews/classify.py   단수/상수도 사고/풍수해 분류, 유역·지자체 매칭
 waternews/monitor.py    재난문자 실시간 폴링, 예약 키워드 뉴스 조회
+waternews/store.py      수집 이력 저장 (SQLite, 사고 분석용)
+waternews/analysis.py   맥락 카운팅 · 사건 군집 · 일지 · 인사이트 (규칙 기반)
+waternews/ai.py         AI 브리핑 (선택, Claude API)
 waternews/settings.py   환경설정 저장 · 인증키 마스킹
 waternews/defaults.py   기본 키워드 · 유역별 지자체 목록
 waternews/demo.py       데모 모드 가상 데이터
 web/                    React 화면 (Vite)
   src/App.jsx           탭 · 실시간 이벤트(SSE) · 알림
-  src/components/       Dashboard, DisasterTab, NewsTab, SettingsTab, Tags
+  src/components/       Dashboard, AnalysisTab, DisasterTab, NewsTab, SettingsTab, Tags
   dist/                 빌드 결과 (npm run build, git 제외)
 ```

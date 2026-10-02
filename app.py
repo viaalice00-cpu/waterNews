@@ -15,7 +15,7 @@ import urllib.parse
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from waternews import disaster, news, settings as settings_mod
+from waternews import ai, analysis, disaster, news, settings as settings_mod, store
 from waternews.classify import RegionMatcher
 from waternews.monitor import Monitor, enabled_basin_ids, is_alert, matcher_for
 from waternews.net import now_kst
@@ -42,6 +42,9 @@ if DEMO:
 else:
     MONITOR = Monitor(load_settings)
     NEWS_GETTER = None
+
+
+AI_CACHE = {}   # (사건 id, 항목 수, 모델) → 브리핑. 같은 사건에 새 기사가 들어오면 다시 생성
 
 
 def _csv(v):
@@ -118,14 +121,15 @@ class Handler(BaseHTTPRequestHandler):
         q = {k: v[-1] for k, v in urllib.parse.parse_qs(url.query).items()}
         try:
             if url.path == "/api/settings":
-                return self._json({**settings_mod.public_view(load_settings() if DEMO else settings_mod.load()),
-                                   "demo": DEMO})
+                return self._json(self._settings_view(load_settings() if DEMO else settings_mod.load()))
             if url.path == "/api/status":
                 return self._json(MONITOR.status())
             if url.path == "/api/live":
                 return self._json({"items": MONITOR.live_items(), "status": MONITOR.status()})
             if url.path == "/api/news/scheduled":
                 return self._json({"items": MONITOR.scheduled_news(), "status": MONITOR.status()})
+            if url.path == "/api/analysis":
+                return self._analysis(q)
             if url.path == "/api/news":
                 return self._news(q)
             if url.path == "/api/disaster":
@@ -147,7 +151,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(f"설정 저장 실패: {e}")
         settings_mod.save(new)
         MONITOR.trigger("disaster")
-        self._json({**settings_mod.public_view(load_settings() if DEMO else new), "demo": DEMO})
+        self._json(self._settings_view(load_settings() if DEMO else new))
 
     def do_POST(self):
         try:
@@ -156,11 +160,58 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             if self.path == "/api/disaster/test":
                 return self._test_key(self._body())
+            if self.path == "/api/analysis/collect":
+                MONITOR.collect_now()
+                return self._json({"ok": True})
+            if self.path == "/api/analysis/ai":
+                return self._ai_briefing(self._body())
         except ValueError as e:
             return self._error(str(e))
         return self._error("not found", 404)
 
     # ------------------------------------------------------------ API 구현
+    @staticmethod
+    def _settings_view(s):
+        return {**settings_mod.public_view(s), "demo": DEMO, "aiModels": ai.AI_MODELS}
+
+    def _run_analysis(self, q, keep_items=False):
+        s = load_settings()
+        hours = max(1, min(24 * 30, int(q.get("hours") or 72)))
+        now = now_kst()
+        since = now - timedelta(hours=hours)
+        items = store.load(since.isoformat())
+        prev = store.load((since - timedelta(hours=hours)).isoformat(), since.isoformat())
+        ids = self._basin_ids(q, s)
+        res = analysis.analyze(items, prev, hours, ids or None, keep_items=keep_items)
+        res.update(hours=hours, since=since.isoformat(), until=now.isoformat(),
+                   basins=sorted(ids), store=store.stats())
+        return res
+
+    def _analysis(self, q):
+        res = self._run_analysis(q)
+        model = load_settings()["ai"]["model"]
+        for c in res["clusters"]:
+            cached = AI_CACHE.get((c["id"], c["counts"]["total"], model))
+            c["ai"] = cached
+        return self._json(res)
+
+    def _ai_briefing(self, body):
+        q = {"hours": body.get("hours")}
+        if "basins" in body:
+            q["basins"] = body["basins"]
+        res = self._run_analysis(q, keep_items=True)
+        c = next((c for c in res["clusters"] if c["id"] == body.get("clusterId")), None)
+        if not c:
+            return self._error("해당 사건을 찾을 수 없습니다. 분석을 새로고침하세요.", 404)
+        s = load_settings()
+        key = (c["id"], c["counts"]["total"], s["ai"]["model"])
+        if key not in AI_CACHE or body.get("refresh"):
+            try:
+                AI_CACHE[key] = ai.generate_briefing(c, c["_items"], s["ai"]["apiKey"], s["ai"]["model"])
+            except ai.AIError as e:
+                return self._json({"ok": False, "message": str(e)})
+        return self._json({"ok": True, **AI_CACHE[key]})
+
     def _basin_ids(self, q, s):
         if "basins" in q:
             return set(_csv(q["basins"]))
@@ -185,6 +236,10 @@ class Handler(BaseHTTPRequestHandler):
                                region_in_query=_bool(q.get("regionInQuery"), s["news"]["regionInQuery"]),
                                **kwargs)
         res.update(start=start.isoformat(), end=end.isoformat(), keywords=keywords, sources=sources)
+        try:
+            store.save_news(res["items"])   # 사고 분석용 누적
+        except Exception as e:
+            print(f"[store] 뉴스 저장 실패: {e}", flush=True)
         return self._json(res)
 
     def _disaster(self, q):
@@ -258,6 +313,8 @@ def main(argv=None):
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     MONITOR.start()
+    if DEMO:
+        MONITOR.collect_now()   # 데모: 사고 분석 화면용 데이터 즉시 수집
     mode = " [데모 모드]" if DEMO else ""
     print(f"모니터링 서버 실행 중{mode}: http://{args.host}:{args.port}  (종료: Ctrl+C)", flush=True)
     try:

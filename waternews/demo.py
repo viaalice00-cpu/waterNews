@@ -72,18 +72,36 @@ def fetch_page(sd, page_no=1, crt_dt=None, rgn_nm=None):
     }))
 
 
-_NEWS = [
-    ("정읍시, 송수관 파열로 시내 일부 단수…급수차 긴급 투입", "전북일보"),
-    ("공주시 신관동 상수도 관로 보수공사, 오늘 밤까지 단수", "충청투데이"),
-    ("대전 갑천 홍수주의보…하천변 출입 통제", "대전일보"),
-    ("완주군 봉동읍 탁수 민원 잇따라…정수장 설비 점검", "새전북신문"),
-    ("화성시 집중호우로 저지대 침수 피해 접수", "경기일보"),
-    ("대구 수성구 상수도관 누수 복구, 범어동 단수", "매일신문"),
-    ("여수시 배수지 청소로 국동 단수 안내", "광주일보"),
-    ("전주시, 노후 상수관 교체 사업 착수", "전라일보"),
-    ("청주시 '물 절약' 캠페인 진행", "충북일보"),
-    ("국민의힘 대전·충남 사고당협 단수 임명도 제외…\"추가 논의\"", "대전일보"),
+_NEWS = [  # (제목, 언론사, 요약)
+    ("정읍시, 송수관 파열로 시내 일부 단수…급수차 긴급 투입", "전북일보",
+     "노후 송수관이 파열되면서 시기동·수성동 일대 약 3,200세대에 단수가 발생했다. 시는 급수차 8대와 병물을 지원하고 긴급 복구 작업 중이다."),
+    ("정읍 단수 12시간째…주민 불편 호소, 민원 빗발", "새전북신문",
+     "정읍시 단수가 12시간째 이어지며 상가 영업 차질과 주민 민원이 잇따르고 있다. 시는 노후 관로 교체 시기를 놓쳤다는 지적에 원인 조사에 나섰다."),
+    ("정읍시의회 '단수 늑장 대응' 질타…책임 규명 요구", "전라일보",
+     "시의회 의원들은 단수 사태에 대한 늑장 안내와 부실 대응을 질타하며 보상 대책을 요구했다."),
+    ("정읍시 단수 복구 완료…오늘 오전 정상 공급 재개", "전북도민일보",
+     "정읍시는 파열 관로 교체를 마치고 정상 공급을 재개했다고 밝혔다. 수도요금 감면도 검토 중이다."),
+    ("공주시 신관동 상수도 관로 보수공사, 오늘 밤까지 단수", "충청투데이",
+     "공주시는 상수도 관로 보수공사로 신관동 일원 약 1,500세대가 14시부터 22시까지 단수된다고 안내했다."),
+    ("대전 갑천 홍수주의보…하천변 출입 통제", "대전일보",
+     "집중호우로 갑천 수위가 오르며 홍수주의보가 발령됐다. 하천변 도로가 통제되고 저지대 침수 우려 지역 주민에게 대피 안내 문자가 발송됐다."),
+    ("완주군 봉동읍 탁수 민원 잇따라…정수장 설비 점검", "새전북신문",
+     "완주군 봉동읍에서 흙탕물이 나온다는 민원이 이어져 정수장 설비 점검에 나섰다. 군은 잠시 방류 후 사용할 것을 안내했다."),
+    ("화성시 집중호우로 저지대 침수 피해 접수", "경기일보", "화성시 저지대 주택 20가구가 침수 피해를 입었다."),
+    ("대구 수성구 상수도관 누수 복구, 범어동 단수", "매일신문", "공사 중 굴착으로 상수도관이 파손돼 누수가 발생했다."),
+    ("여수시 배수지 청소로 국동 단수 안내", "광주일보", "여수시는 배수지 청소로 국동 일원에 단수를 안내했다."),
+    ("전주시, 노후 상수관 교체 사업 착수", "전라일보", "전주시가 노후 상수관 교체 사업에 착수했다."),
+    ("청주시 '물 절약' 캠페인 진행", "충북일보", "청주시가 물 절약 캠페인을 진행했다."),
+    ("국민의힘 대전·충남 사고당협 단수 임명도 제외…\"추가 논의\"", "대전일보", "당협위원장 단수 임명 논의가 미뤄졌다."),
 ]
+
+
+# 기사별 '몇 시간 전' (정읍 단수 사건이 발생→확산→의회→복구 순으로 이어지도록)
+_AGO = {0: 30, 1: 18, 2: 8, 3: 2, 4: 5, 5: 4, 6: 10}
+
+
+def _ago(i):
+    return _AGO.get(i, 3 * i + 1)
 
 
 def news_getter(url, headers=None, **_):
@@ -92,9 +110,9 @@ def news_getter(url, headers=None, **_):
     if "news.google.com" in url:
         items = "".join(
             f"<item><title>{t} - {p}</title><link>https://news.example.com/g/{i}</link>"
-            f"<pubDate>{format_datetime(now - timedelta(hours=3 * i + 1))}</pubDate>"
+            f"<pubDate>{format_datetime(now - timedelta(hours=_ago(i)))}</pubDate>"
             f"<source url=\"https://news.example.com\">{p}</source></item>"
-            for i, (t, p) in enumerate(_NEWS) if q.get("q", [""])[0].split()[0].strip('"') in t
+            for i, (t, p, _) in enumerate(_NEWS) if q.get("q", [""])[0].split()[0].strip('"') in t
             or i % 3 == 0)
         return 200, f"<?xml version=\"1.0\"?><rss><channel>{items}</channel></rss>".encode()
     kw = q.get("query", [""])[0]
@@ -102,8 +120,8 @@ def news_getter(url, headers=None, **_):
         "title": t.replace(kw, f"<b>{kw}</b>"),
         "originallink": f"https://www.news{i}.example.kr/article/{i}",
         "link": f"https://n.news.naver.com/mnews/article/{i}",
-        "description": f"{p} 보도. {t}",
-        "pubDate": format_datetime(now - timedelta(hours=2 * i + 2)),
-    } for i, (t, p) in enumerate(_NEWS) if kw in t]
+        "description": d,
+        "pubDate": format_datetime(now - timedelta(hours=_ago(i))),
+    } for i, (t, p, d) in enumerate(_NEWS) if kw in t or kw in d]
     return 200, json.dumps({"total": len(items), "start": 1, "display": len(items),
                             "items": items}).encode()

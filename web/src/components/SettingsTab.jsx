@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fmtTime, post, splitList } from "../utils.js";
 
-const EMPTY_SECRETS = { serviceKey: "", clientId: "", clientSecret: "" };
+const EMPTY_SECRETS = { serviceKey: "", clientId: "", clientSecret: "", aiKey: "" };
 
 function KeywordEditor({ keywords, onChange, placeholder = "키워드 입력 후 Enter (쉼표로 여러 개)" }) {
   const [input, setInput] = useState("");
@@ -115,6 +115,7 @@ export default function SettingsTab({ settings, toast, onSaved }) {
         sources: ns.sources, regionInQuery: ns.regionInQuery,
       },
       alerts: draft.alerts,
+      ai: { model: draft.ai.model },
       keywords: draft.keywords,
       excludeKeywords: draft.excludeKeywords,
       basins: draft.basins,
@@ -122,6 +123,7 @@ export default function SettingsTab({ settings, toast, onSaved }) {
     if (secrets.serviceKey.trim()) payload.safetydata.serviceKey = secrets.serviceKey.trim();
     if (secrets.clientId.trim()) payload.naver.clientId = secrets.clientId.trim();
     if (secrets.clientSecret.trim()) payload.naver.clientSecret = secrets.clientSecret.trim();
+    if (secrets.aiKey.trim()) payload.ai.apiKey = secrets.aiKey.trim();
     save(payload);
   };
 
@@ -232,6 +234,27 @@ export default function SettingsTab({ settings, toast, onSaved }) {
             <label className="check"><input type="checkbox" checked={ns.regionInQuery} onChange={chk(set("news", "regionInQuery"))} /> 검색어에 지자체명 결합(구글)</label>
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head"><h2>AI 브리핑 (선택)</h2><span className="muted small">사고 분석 탭의 사건별 AI 요약</span></div>
+        <p className="muted small">
+          Anthropic API 키(console.anthropic.com 발급)를 입력하면 사건별로 상황 요약·경과·쟁점·대응 시사점 브리핑을 생성합니다.
+          처음 한 번 명령 프롬프트에서 <code>pip install anthropic</code> 실행이 필요합니다. 생성할 때마다 해당 사건의
+          뉴스 제목·요약과 재난문자 내용이 Claude API로 전송되며 API 사용료가 발생합니다. 키가 없어도 규칙 기반 브리핑은 동작합니다.
+        </p>
+        <div className="row gap wrap">
+          <label className="field grow">Anthropic API 키
+            <input type="password" placeholder={placeholder(draft.ai.apiKeySet)} value={secrets.aiKey} onChange={setSecret("aiKey")} />
+            {draft.ai.apiKeySet && <span className="muted small">저장됨: {draft.ai.apiKeyHint}</span>}
+          </label>
+          <label className="field">모델
+            <select value={draft.ai.model} onChange={(e) => set("ai", "model")(e.target.value)}>
+              {Object.entries(settings.aiModels || {}).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+        <button type="button" className="btn ghost" onClick={() => clearSecrets(["ai.apiKey"])}>키 삭제</button>
       </div>
 
       <div className="card">

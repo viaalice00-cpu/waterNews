@@ -11,11 +11,13 @@ from .defaults import DEFAULT_SETTINGS
 DATA_DIR = os.environ.get("WATERNEWS_DATA_DIR") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
-SECRET_FIELDS = [("safetydata", "serviceKey"), ("naver", "clientId"), ("naver", "clientSecret")]
+SECRET_FIELDS = [("safetydata", "serviceKey"), ("naver", "clientId"), ("naver", "clientSecret"),
+                 ("ai", "apiKey")]
 ENV_FALLBACK = {
     ("safetydata", "serviceKey"): "SAFETYDATA_SERVICE_KEY",
     ("naver", "clientId"): "NAVER_CLIENT_ID",
     ("naver", "clientSecret"): "NAVER_CLIENT_SECRET",
+    ("ai", "apiKey"): "ANTHROPIC_API_KEY",
 }
 
 _lock = threading.RLock()
@@ -142,6 +144,13 @@ def apply_update(current, payload):
         s["news"]["scheduleIntervalMin"] = _int(news["scheduleIntervalMin"], 30, 5, 1440)
     if "scheduleLookbackHours" in news:
         s["news"]["scheduleLookbackHours"] = _int(news["scheduleLookbackHours"], 24, 1, 168)
+
+    ai = payload.get("ai") or {}
+    if "model" in ai:
+        from .ai import AI_MODELS
+        if ai["model"] not in AI_MODELS:
+            raise ValueError("지원하지 않는 AI 모델입니다.")
+        s["ai"]["model"] = ai["model"]
 
     alerts = payload.get("alerts") or {}
     if "waterOnly" in alerts:

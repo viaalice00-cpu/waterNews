@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from . import disaster, news, settings as settings_mod
+from . import disaster, news, settings as settings_mod, store
 from .classify import RegionMatcher
 from .net import now_kst
 
@@ -99,6 +99,10 @@ class Monitor:
                     self.d_status["error"] = str(e)
                 self.hub.publish("status", self.status())
                 return
+            try:
+                store.save_disasters(self._annotate_disaster(items, s))
+            except Exception as e:  # 저장 실패가 실시간 감시를 멈추지 않도록
+                print(f"[store] 재난문자 저장 실패: {e}", flush=True)
             new = []
             with self.lock:
                 for it in items:
@@ -157,6 +161,10 @@ class Monitor:
                 res = news.search_news(s, s["keywords"], start, now.date(), s["news"]["sources"],
                                        matcher_for(s), **kwargs)
                 res["items"] = [it for it in res["items"] if not it["excludedBy"]]
+                try:
+                    store.save_news(res["items"])
+                except Exception as e:
+                    print(f"[store] 뉴스 저장 실패: {e}", flush=True)
                 err = "; ".join(res["errors"]) or None
             except ValueError as e:
                 res, err = {"items": []}, str(e)
@@ -200,6 +208,13 @@ class Monitor:
                          "count": len(self.news_items)},
                 "serverTime": now_kst().isoformat(),
             }
+
+    def collect_now(self):
+        """사고 분석용 즉시 수집: 재난문자 + 예약 키워드 뉴스 (예약 조회가 꺼져 있어도 1회 실행)."""
+        s = self.load_settings()
+        if s["safetydata"]["serviceKey"]:
+            threading.Thread(target=self.poll_disaster, daemon=True).start()
+        threading.Thread(target=self.run_news_schedule, daemon=True).start()
 
     def trigger(self, what="all"):
         if what in ("all", "disaster"):

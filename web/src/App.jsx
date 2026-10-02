@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AnalysisTab from "./components/AnalysisTab.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import DisasterTab from "./components/DisasterTab.jsx";
 import NewsTab from "./components/NewsTab.jsx";
@@ -7,6 +8,7 @@ import { CAT, api, beep, byTimeDesc, clockText, notify } from "./utils.js";
 
 const TABS = [
   { id: "dashboard", label: "대시보드" },
+  { id: "analysis", label: "사고 분석" },
   { id: "disaster", label: "재난문자" },
   { id: "news", label: "뉴스 조회" },
   { id: "settings", label: "환경설정" },
@@ -172,6 +174,9 @@ export default function App() {
       <main>
         {/* 탭 전환 시 조회 결과·입력값이 유지되도록 모두 마운트한 채 숨김 처리 */}
         <section className="tab active" hidden={tab !== "dashboard"}><Dashboard {...shared} /></section>
+        <section className="tab active" hidden={tab !== "analysis"}>
+          <AnalysisTab {...shared} active={tab === "analysis"} />
+        </section>
         <section className="tab active" hidden={tab !== "disaster"}><DisasterTab {...shared} fresh={fresh} /></section>
         <section className="tab active" hidden={tab !== "news"}><NewsTab {...shared} /></section>
         <section className="tab active" hidden={tab !== "settings"}>
