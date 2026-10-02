@@ -45,7 +45,7 @@ class DisasterApiTest(unittest.TestCase):
 
     def test_error_header(self):
         bad = {"header": {"resultCode": "30", "resultMsg": "SERVICE KEY IS NOT REGISTERED", "errorMsg": "등록되지 않은 키"}}
-        with self.assertRaisesRegex(disaster.DisasterApiError, "SERVICE KEY"):
+        with self.assertRaisesRegex(disaster.DisasterApiError, "SERVICE KEY.*safetydata.go.kr 마이페이지"):
             disaster.parse_response(json.dumps(bad).encode())
 
     def test_non_json(self):

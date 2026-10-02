@@ -16,6 +16,19 @@ from .net import KST, FetchError, http_get
 
 OK_CODES = {"", "0", "00", "000", "200", "INFO-0", "INFO-000"}
 
+# 공공 API 표준 오류 코드 → 조치 안내 (메시지는 재난안전데이터 공유플랫폼 서버가 보낸 것)
+ERROR_HINTS = {
+    "30": "재난안전데이터 공유플랫폼(safetydata.go.kr)에 등록되지 않은 키입니다. "
+          "① 공공데이터포털(data.go.kr) 키가 아닌 safetydata.go.kr 마이페이지의 '행정안전부_긴급재난문자' 서비스키인지, "
+          "② 이용신청이 '승인' 상태인지(승인 직후에는 반영까지 시간이 걸릴 수 있음), "
+          "③ 앞뒤 공백 없이 전체를 복사했는지 확인하세요.",
+    "31": "서비스키 활용 기간이 만료되었습니다. safetydata.go.kr 에서 활용 기간을 연장하세요.",
+    "32": "등록되지 않은 IP에서 호출했습니다. 이용신청 정보의 허용 IP를 확인하세요.",
+    "22": "일일 호출 한도를 초과했습니다. 환경설정에서 조회 주기(초)를 늘리세요.",
+    "20": "서비스 접근이 거부되었습니다. 해당 데이터의 이용신청 승인 여부를 확인하세요.",
+    "12": "해당 오픈API 서비스가 없거나 폐기되었습니다. 고급 설정의 API URL을 확인하세요.",
+}
+
 
 class DisasterApiError(Exception):
     pass
@@ -91,7 +104,8 @@ def parse_response(payload):
     code = str(header.get("resultCode", "")).strip()
     if code not in OK_CODES:
         msg = " / ".join(str(x) for x in (header.get("resultMsg"), header.get("errorMsg")) if x)
-        raise DisasterApiError(f"[{code}] {msg or '오류 응답'}")
+        hint = ERROR_HINTS.get(code.lstrip("0") if code.isdigit() and len(code) > 2 else code)
+        raise DisasterApiError(f"[{code}] {msg or '오류 응답'}" + (f" — {hint}" if hint else ""))
 
     body = data.get("body")
     if isinstance(body, dict):
