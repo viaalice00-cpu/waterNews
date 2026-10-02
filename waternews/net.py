@@ -10,7 +10,10 @@ USER_AGENT = "Mozilla/5.0 (compatible; WaterNewsMonitor/0.1)"
 
 
 class FetchError(Exception):
-    pass
+    def __init__(self, message, status=None, body=""):
+        super().__init__(message)
+        self.status = status   # HTTP 상태 코드 (연결 실패면 None)
+        self.body = body
 
 
 def now_kst():
@@ -26,7 +29,7 @@ def http_get(url, headers=None, timeout=20, verify_ssl=True):
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         body = e.read()[:300].decode("utf-8", "replace")
-        raise FetchError(f"HTTP {e.code}: {body}") from e
+        raise FetchError(f"HTTP {e.code}: {body}", status=e.code, body=body) from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
         reason = getattr(e, "reason", e)
         raise FetchError(f"연결 실패: {reason}") from e

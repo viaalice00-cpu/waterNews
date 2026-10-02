@@ -3,6 +3,8 @@
 import html
 import json
 import re
+import threading
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +17,8 @@ from .net import KST, FetchError, http_get, now_kst
 GOOGLE_RSS = "https://news.google.com/rss/search"
 NAVER_NEWS = "https://openapi.naver.com/v1/search/news.json"
 REGION_CHUNK = 8          # 구글 검색어 1건당 OR 결합 지명 수
+NAVER_MIN_INTERVAL = 0.15  # 네이버 호출 간 최소 간격(초) — 초당 호출 제한(오류 012) 대응, 약 6~7회/초
+NAVER_RETRIES = 3          # 속도 제한(429) 시 재시도 횟수 (1초 → 2초 → 4초 대기)
 _TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -97,13 +101,58 @@ def parse_naver(payload):
     return items, int(data.get("total") or 0)
 
 
+class _Throttle:
+    """여러 스레드(수동 조회·예약 조회)가 공유하는 호출 간격 제한."""
+
+    def __init__(self, interval):
+        self.interval = interval
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def wait(self):
+        with self._lock:
+            now = time.monotonic()
+            if now < self._next:
+                time.sleep(self._next - now)
+                now = self._next
+            self._next = now + self.interval
+
+
+naver_throttle = _Throttle(NAVER_MIN_INTERVAL)
+
+
+def _naver_error_code(body):
+    try:
+        return str(json.loads(body).get("errorCode", ""))
+    except (ValueError, AttributeError):
+        return ""
+
+
+def naver_get(url, headers, getter=http_get, sleep=time.sleep):
+    """네이버 API 호출: 간격 제한 + 속도 제한(012) 시 지수 백오프 재시도. 일일 한도(010)는 즉시 안내."""
+    for attempt in range(NAVER_RETRIES + 1):
+        naver_throttle.wait()
+        try:
+            return getter(url, headers=headers)
+        except FetchError as e:
+            if e.status != 429:
+                raise
+            if _naver_error_code(e.body) == "010":
+                raise FetchError("네이버 검색 API 일일 호출 한도(25,000회)를 초과했습니다. 내일 다시 시도하거나 "
+                                 "예약 조회 주기를 늘리고 네이버 최대 페이지 수를 줄이세요.", 429, e.body) from e
+            if attempt == NAVER_RETRIES:
+                raise FetchError("네이버 검색 API 속도 제한(초당 호출 수)을 초과했습니다. 잠시 후 다시 조회하세요.",
+                                 429, e.body) from e
+            sleep(2 ** attempt)
+
+
 def fetch_naver(keyword, client_id, client_secret, start, max_pages=5, getter=http_get):
     """최신순으로 페이지를 넘기며 조회 시작일 이전 기사가 나오면 중단."""
     headers = {"X-Naver-Client-Id": client_id, "X-Naver-Client-Secret": client_secret}
     out = []
     for page in range(max_pages):
         params = {"query": keyword, "display": 100, "start": page * 100 + 1, "sort": "date"}
-        _, body = getter(f"{NAVER_NEWS}?{urllib.parse.urlencode(params)}", headers=headers)
+        _, body = naver_get(f"{NAVER_NEWS}?{urllib.parse.urlencode(params)}", headers, getter)
         items, total = parse_naver(body)
         out.extend(items)
         oldest = min((i["publishedAt"] for i in items if i["publishedAt"]), default="")

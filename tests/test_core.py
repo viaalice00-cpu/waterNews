@@ -245,3 +245,65 @@ class NewsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NaverRateLimitTest(unittest.TestCase):
+    RATE = '{"errorMessage":"Rate limit exceeded. (속도 제한을 초과했습니다.)","errorCode":"012"}'
+    DAILY = '{"errorMessage":"Query limit exceeded.","errorCode":"010"}'
+
+    def setUp(self):
+        self._interval = news.naver_throttle.interval
+        news.naver_throttle.interval = 0.0
+
+    def tearDown(self):
+        news.naver_throttle.interval = self._interval
+
+    def _getter(self, failures, body):
+        calls = []
+
+        def getter(url, headers=None, **_):
+            calls.append(url)
+            if len(calls) <= failures:
+                raise news.FetchError(f"HTTP 429: {body}", status=429, body=body)
+            return 200, b'{"total": 0, "items": []}'
+        return getter, calls
+
+    def test_rate_limit_retries_with_backoff(self):
+        getter, calls = self._getter(2, self.RATE)
+        slept = []
+        status, _ = news.naver_get("u", {}, getter, sleep=slept.append)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(slept, [1, 2])
+
+    def test_rate_limit_gives_up_with_clear_message(self):
+        getter, calls = self._getter(99, self.RATE)
+        with self.assertRaisesRegex(news.FetchError, "속도 제한"):
+            news.naver_get("u", {}, getter, sleep=lambda s: None)
+        self.assertEqual(len(calls), news.NAVER_RETRIES + 1)
+
+    def test_daily_quota_is_not_retried(self):
+        getter, calls = self._getter(99, self.DAILY)
+        with self.assertRaisesRegex(news.FetchError, "일일 호출 한도"):
+            news.naver_get("u", {}, getter, sleep=lambda s: self.fail("일일 한도는 재시도하지 않음"))
+        self.assertEqual(len(calls), 1)
+
+    def test_throttle_spaces_concurrent_calls(self):
+        import threading
+        import time
+        t = news._Throttle(0.05)
+        stamps = []
+        lock = threading.Lock()
+
+        def worker():
+            t.wait()
+            with lock:
+                stamps.append(time.monotonic())
+        threads = [threading.Thread(target=worker) for _ in range(6)]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join()
+        stamps.sort()
+        gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+        self.assertGreaterEqual(min(gaps), 0.045)
