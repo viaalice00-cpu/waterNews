@@ -67,6 +67,7 @@ function ClusterCard({ c, open, onToggle, ai, onAi, aiEnabled }) {
       <div className="cluster-head">
         <span className={`tag sev ${SEVERITY_CLS[c.severity]}`}>심각도 {c.severity}</span>
         <span className={`tag st ${STATUS_CLS[c.status]}`}>{c.status}</span>
+        {c.group && <span className={`tag ctx-group ctx-${c.group.id}`}>{c.group.icon} {c.group.name.replace(/\s*\(.*\)$/, "")}</span>}
         <strong>{c.region} · {c.incidentType}</strong>
         <span className="muted small">
           {fmtTime(c.start)}{c.end !== c.start ? ` ~ ${fmtTime(c.end)}` : ""} · 뉴스 {c.counts.news} · 재난문자 {c.counts.disaster}
@@ -234,6 +235,12 @@ export default function AnalysisTab({ settings, active, toast, live, scheduled }
               <h2><span className="step">2</span> 이해 영역 맥락 카운팅</h2>
               <span className="muted small">기사·문자 1건에 해당 맥락이 언급되면 1회 집계</span>
             </div>
+            {data.groups && (
+              <div className="ctx-groups">
+                <ContextBars title="키워드 그룹 맥락" rows={data.groups.map((g) => ({ tag: `${g.icon} ${g.name}`.trim(), count: g.count }))} />
+                <p className="muted small">기사·문자가 어느 관심 키워드 그룹의 맥락(맥락 단어 2개 이상)으로 쓰였는지 집계했습니다.</p>
+              </div>
+            )}
             <div className="ctx-grid">
               {Object.entries(data.contexts).map(([dim, rows]) => <ContextBars key={dim} title={dim} rows={rows} />)}
             </div>

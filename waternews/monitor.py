@@ -158,7 +158,7 @@ class Monitor:
             start = (now - timedelta(hours=s["news"]["scheduleLookbackHours"])).date()
             kwargs = {"getter": self.news_getter} if self.news_getter else {}
             try:
-                res = news.search_news(s, s["keywords"], start, now.date(), s["news"]["sources"],
+                res = news.search_news(s, settings_mod.scheduled_keywords(s), start, now.date(), s["news"]["sources"],
                                        matcher_for(s), **kwargs)
                 res["items"] = [it for it in res["items"] if not it["excludedBy"]]
                 try:

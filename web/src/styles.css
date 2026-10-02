@@ -248,3 +248,24 @@ summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .tag.phase.ph-여론 { color: var(--cat-accident); }
 .tag.phase.ph-복구 { color: var(--ok); }
 code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+/* ---------------- 키워드 그룹 */
+.kg-section { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+.kg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.kg-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.kg-card.on { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+.kg-head { display: flex; align-items: flex-start; gap: 10px; }
+.kg-icon { font-size: 20px; line-height: 1.2; }
+.kg-icon-input { width: 44px; text-align: center; font-size: 18px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+.kg-title { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.kg-title input { width: 100%; }
+.kg-terms { display: flex; flex-direction: column; gap: 6px; }
+.chip.toggle { font: inherit; font-size: 13px; color: var(--text); }
+.chip.toggle.sel { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); border-color: var(--primary); }
+.btn.primary-soft { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); color: var(--primary); font-weight: 600; }
+.ctx-filter { margin: 4px 0 8px; }
+.ctx-cell { display: flex; flex-direction: column; gap: 3px; }
+.tag.ctx-group { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); font-weight: 500; }
+.tag.ctx-flood { color: var(--cat-flood); }
+.tag.ctx-none { color: var(--muted); border-style: dashed; font-weight: 500; }
+.ctx-groups { max-width: 520px; margin-bottom: 16px; }

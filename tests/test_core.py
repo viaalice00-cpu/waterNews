@@ -1,5 +1,10 @@
 import json
 import os
+
+
+def custom_keywords(s):
+    """'사용자 설정 키워드' 그룹의 키워드 (이전 버전의 단일 키워드 목록이 옮겨지는 곳)."""
+    return next(g for g in s["keywordGroups"] if g["id"] == "custom")["keywords"]
 import tempfile
 import unittest
 from datetime import date
@@ -136,6 +141,55 @@ class ExclusionTest(unittest.TestCase):
         self.assertEqual(exclusion_hits("단수 임명 논란", ["임명"]), ["임명"])
 
 
+class KeywordGroupTest(unittest.TestCase):
+    G = DEFAULT_SETTINGS["keywordGroups"]
+
+    def test_context_needs_two_distinct_terms(self):
+        from waternews.classify import group_context
+        self.assertEqual(group_context("단수 공천 확정", "단수 공천 확정", self.G), [])
+        self.assertEqual(group_context("노사 협상 파열", "노사 협상 파열", self.G), [])
+        hit = group_context("정읍 단수", "정읍 단수…급수차 투입", self.G)
+        self.assertEqual(hit[0]["id"], "water")
+        self.assertEqual(group_context("도로 침수", "집중호우로 도로 침수", self.G)[0]["id"], "flood")
+
+    def test_title_terms_weigh_more(self):
+        from waternews.classify import group_context
+        text = "하천 범람 우려 — 상수도 관로 점검도"
+        hits = group_context("하천 범람 우려", text, self.G)
+        self.assertEqual([h["id"] for h in hits], ["flood", "water"])
+
+    def test_group_update_and_scheduled_keywords(self):
+        s = settings.apply_update(json.loads(json.dumps(DEFAULT_SETTINGS)), {
+            "keywordGroups": [
+                {"id": "water", "name": "수도", "keywords": ["단수", "단수"], "contextTerms": ["단수", "급수"],
+                 "scheduled": True},
+                {"id": "", "name": "새 그룹", "keywords": ["가뭄"], "contextTerms": ["가뭄", "저수율"],
+                 "scheduled": False, "minTerms": 9},
+                {"id": "x", "name": "", "keywords": ["무시"]},
+            ]})
+        self.assertEqual([g["name"] for g in s["keywordGroups"]], ["수도", "새 그룹"])
+        self.assertTrue(s["keywordGroups"][1]["id"])
+        self.assertEqual(s["keywordGroups"][1]["minTerms"], 5)
+        self.assertEqual(s["keywords"], ["단수", "가뭄"])
+        self.assertEqual(settings.scheduled_keywords(s), ["단수"])
+
+    def test_news_items_carry_group_context(self):
+        pub = format_datetime(datetime(2026, 9, 30, 10, 0, tzinfo=KST))
+        rss = (f"<rss><channel>"
+               f"<item><title>정읍시 송수관 파열로 단수 - A</title><link>https://g/1</link><pubDate>{pub}</pubDate><source url='x'>A</source></item>"
+               f"<item><title>노사 협상 파열 - B</title><link>https://g/2</link><pubDate>{pub}</pubDate><source url='x'>B</source></item>"
+               f"</channel></rss>").encode()
+        s = json.loads(json.dumps(DEFAULT_SETTINGS))
+        res = news.search_news(s, ["파열"], date(2026, 9, 24), date(2026, 9, 30), ["google"],
+                               getter=lambda *a, **k: (200, rss))
+        by = {i["title"]: i for i in res["items"]}
+        self.assertTrue(by["정읍시 송수관 파열로 단수"]["contextMatch"])
+        self.assertEqual(by["정읍시 송수관 파열로 단수"]["groups"][0]["id"], "water")
+        self.assertFalse(by["노사 협상 파열"]["contextMatch"])
+        self.assertEqual(by["노사 협상 파열"]["categories"], [])         # '파열' 만으로는 상수도 사고 아님
+        self.assertIn("water_accident", by["정읍시 송수관 파열로 단수"]["categories"])
+
+
 class SettingsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -167,7 +221,8 @@ class SettingsTest(unittest.TestCase):
                        {"id": "", "name": "새만금유역", "enabled": False, "regions": ["군산시"]}],
             "safetydata": {"pollIntervalSec": 5},
         })
-        self.assertEqual(s["keywords"], ["단수", "적수"])
+        self.assertEqual(custom_keywords(s), ["단수", "적수"])
+        self.assertIn("적수", s["keywords"])                  # 전체 키워드 = 모든 그룹의 합집합
         self.assertEqual(s["basins"][0]["regions"], ["정읍시"])
         self.assertTrue(s["basins"][1]["id"])
         self.assertEqual(s["safetydata"]["pollIntervalSec"], 30)
@@ -338,13 +393,13 @@ class DataLocationTest(unittest.TestCase):
             json.dump({"keywords": ["옛설정"], "safetydata": {"serviceKey": "OLDKEY"}}, f)
         self.assertEqual(settings.migrate_legacy(self.legacy), ["settings.json"])
         s = settings.load()
-        self.assertEqual(s["keywords"], ["옛설정"])
+        self.assertEqual(custom_keywords(s), ["옛설정"])        # 이전 키워드 → 사용자 설정 그룹
         self.assertEqual(s["safetydata"]["serviceKey"], "OLDKEY")
         self.assertTrue(os.path.exists(os.path.join(self.legacy, "settings.json")))   # 원본 보존
         # 새 위치에서 바꾼 설정은 다음 실행 때 이전 파일로 덮이지 않음
         settings.save(settings.apply_update(s, {"keywords": ["새설정"]}))
         self.assertEqual(settings.migrate_legacy(self.legacy), [])
-        self.assertEqual(settings.load()["keywords"], ["새설정"])
+        self.assertEqual(custom_keywords(settings.load()), ["새설정"])
 
     def test_corrupted_settings_recover_from_backup(self):
         s = settings.load()
@@ -352,4 +407,4 @@ class DataLocationTest(unittest.TestCase):
         settings.save(settings.apply_update(settings.load(), {"keywords": ["두번째"]}))
         with open(os.path.join(self.new, "settings.json"), "w", encoding="utf-8") as f:
             f.write('{"keywords": ["깨진')      # 저장 도중 전원 차단 등으로 손상
-        self.assertEqual(settings.load()["keywords"], ["첫번째"])
+        self.assertEqual(custom_keywords(settings.load()), ["첫번째"])

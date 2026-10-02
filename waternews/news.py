@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 
-from .classify import classify, exclusion_hits, keyword_hits
+from .classify import classify, exclusion_hits, group_context, keyword_hits
 from .net import KST, FetchError, http_get, now_kst
 
 GOOGLE_RSS = "https://news.google.com/rss/search"
@@ -240,6 +240,12 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
         it["categories"] = classify(text)
         it["keywordHits"] = keyword_hits(text, keywords)
         it["regions"] = matcher.match_news(text) if matcher else []
+        # 키워드 그룹 맥락: 어떤 그룹의 맥락으로 쓰인 기사인지 (없으면 '맥락 불명확')
+        it["groups"] = group_context(it["title"], text, settings.get("keywordGroups"))
+        it["contextMatch"] = bool(it["groups"])
+        if not it["contextMatch"]:
+            # 그룹 맥락이 없으면 '파열'·'누수' 같은 일반 단어만으로는 상수도 사고로 분류하지 않음
+            it["categories"] = classify(text, strict=True)
         if matcher and not it["regions"] and not include_unmatched:
             dropped["region"] += 1
             continue
@@ -247,6 +253,7 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
         it["excludedBy"] = exclusion_hits(text, exclude_words)
         if it["excludedBy"]:
             it["categories"] = []
+            it["groups"], it["contextMatch"] = [], False
             excluded += 1
         items.append(it)
     items.sort(key=lambda x: x["publishedAt"], reverse=True)

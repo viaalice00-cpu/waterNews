@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .classify import CATEGORY_LABELS
+from .classify import CATEGORY_LABELS, group_context
 from .net import now_kst
 
 # ---------------------------------------------------------------- 1. 이해 영역 사전
@@ -117,17 +117,19 @@ def _dt(iso):
 
 
 # ---------------------------------------------------------------- 2. 항목 준비
-def prepare(items):
-    """store.load() 결과에 맥락 태그·대표 지역·사고유형을 붙인다."""
+def prepare(items, groups=None):
+    """store.load() 결과에 맥락 태그·대표 지역·사고유형·키워드 그룹 맥락을 붙인다."""
     out = []
     for it in items:
         text = f"{it['title']} {it['body']}"
+        g = group_context(it["title"], text, groups)
         ctx = context_tags(text)
         types = ctx.get("사고유형") or []
         if not types:  # 사전에 없으면 기본 분류로 대체
             types = [CATEGORY_LABELS.get(c, c) for c in it["categories"]][:1] or ["기타"]
         region = it["regions"][0]["region"] if it["regions"] else (it.get("regionText") or "지역 미상")
         out.append({**it, "text": text, "contexts": ctx, "incidentType": types[0],
+                    "group": {k: g[0][k] for k in ("id", "name", "icon")} if g else None,
                      "region": region, "numbers": extract_numbers(text)})
     return out
 
@@ -211,6 +213,9 @@ def summarize_cluster(c, now):
 
     # 대표 제목: 사건을 처음 알린 뉴스 (없으면 첫 재난문자). 진행 상황은 상태·일지로 표시
     title = (news or items)[0]["title"]
+    group_counts = Counter(it["group"]["id"] for it in items if it["group"])
+    group = next((it["group"] for it in items if it["group"] and it["group"]["id"] == group_counts.most_common(1)[0][0]),
+                 None) if group_counts else None
 
     timeline = [{
         "time": it["time"], "kind": it["kind"], "phase": phase_of(it, i == 0),
@@ -262,7 +267,7 @@ def summarize_cluster(c, now):
     cid = f"{c['region']}|{c['incidentType']}|{start}"
     return {
         "id": cid, "title": title, "region": c["region"], "incidentType": c["incidentType"],
-        "basins": basins, "basinIds": basin_ids, "start": start, "end": end, "durationHours": round(hours, 1),
+        "group": group, "basins": basins, "basinIds": basin_ids, "start": start, "end": end, "durationHours": round(hours, 1),
         "counts": {"news": len(news), "disaster": len(msgs), "total": len(items)},
         "press": sorted({n["source"] for n in news if n["source"]}),
         "contexts": {d: [{"tag": t, "count": n} for t, n in ctx[d].most_common()] for d in DIMENSION_NAMES},
@@ -328,12 +333,20 @@ def global_insights(clusters, items, prev_items, window_hours):
     return out
 
 
-def analyze(items, prev_items=None, window_hours=72, basin_ids=None, keep_items=False, now=None):
+def count_groups(items, groups):
+    counts = Counter(it["group"]["id"] for it in items if it["group"])
+    rows = [{"id": g["id"], "name": g["name"], "icon": g.get("icon", ""), "count": counts.get(g["id"], 0)}
+            for g in groups or [] if g.get("contextTerms")]
+    rows.append({"id": "", "name": "맥락 불명확", "icon": "", "count": sum(1 for it in items if not it["group"])})
+    return rows
+
+
+def analyze(items, prev_items=None, window_hours=72, basin_ids=None, keep_items=False, now=None, groups=None):
     """분석 결과 전체. basin_ids 가 주어지면 해당 유역 항목만 (지역 미매칭 재난문자 포함 여부는 호출 측 결정)."""
     if basin_ids:
         items = [i for i in items if any(r["basinId"] in basin_ids for r in i["regions"])]
         prev_items = [i for i in (prev_items or []) if any(r["basinId"] in basin_ids for r in i["regions"])]
-    prepared = prepare(items)
+    prepared = prepare(items, groups)
     clusters = cluster(prepared, now=now)
     order = {"높음": 0, "보통": 1, "낮음": 2}
     clusters.sort(key=lambda c: (c["status"] in ("복구 완료", "소강"), order[c["severity"]], -_dt(c["end"]).timestamp()))
@@ -345,6 +358,7 @@ def analyze(items, prev_items=None, window_hours=72, basin_ids=None, keep_items=
                       "disaster": sum(i["kind"] == "disaster" for i in items),
                       "previous": len(prev_items or [])},
         "contexts": count_contexts(prepared),
+        "groups": count_groups(prepared, groups),
         "clusters": clusters,
         "insights": global_insights(clusters, items, prev_items or [], window_hours),
     }

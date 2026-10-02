@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, fmtTime, post, splitList } from "../utils.js";
+import { KeywordGroupEditor } from "./KeywordGroups.jsx";
 
 const EMPTY_SECRETS = { serviceKey: "", clientId: "", clientSecret: "", aiKey: "" };
 
@@ -116,7 +117,7 @@ export default function SettingsTab({ settings, toast, onSaved }) {
       },
       alerts: draft.alerts,
       ai: { model: draft.ai.model },
-      keywords: draft.keywords,
+      keywordGroups: draft.keywordGroups,
       excludeKeywords: draft.excludeKeywords,
       basins: draft.basins,
     };
@@ -258,8 +259,16 @@ export default function SettingsTab({ settings, toast, onSaved }) {
       </div>
 
       <div className="card">
-        <div className="card-head"><h2>조회 예약 키워드</h2><span className="muted small">뉴스 검색 기본값 · 재난문자 키워드 강조 · 예약 조회에 사용</span></div>
-        <KeywordEditor keywords={draft.keywords} onChange={setTop("keywords")} />
+        <div className="card-head">
+          <h2>관심 키워드 그룹 (조회 예약 키워드)</h2>
+          <span className="muted small">뉴스 조회의 그룹 선택 · 예약 조회 · 기사 맥락 판단에 사용</span>
+        </div>
+        <p className="muted small">
+          <strong>검색 키워드</strong>는 뉴스 검색어이고, <strong>맥락 단어</strong>는 기사가 어떤 맥락인지 판단하는 단어입니다.
+          기사에 한 그룹의 맥락 단어가 서로 다른 것으로 2개 이상(설정 가능) 나오면 그 그룹 맥락으로 보고,
+          부족하면 '맥락 불명확'으로 표시합니다. 예) "단수 공천", "노사 협상 파열"은 맥락 단어가 1개뿐이라 수도 맥락이 아님.
+        </p>
+        <KeywordGroupEditor groups={draft.keywordGroups} onChange={setTop("keywordGroups")} />
       </div>
 
       <div className="card">

@@ -6,7 +6,39 @@ data/settings.json 이 없을 때 이 값으로 초기화된다. 화면의 [환�
 
 SAFETYDATA_DISASTER_MSG_URL = "https://www.safetydata.go.kr/V2/api/DSSP-IF-00247"
 
-DEFAULT_KEYWORDS = ["단수", "상수도", "홍수", "누수", "수도관 파열", "침수"]
+DEFAULT_KEYWORDS = ["단수", "상수도", "홍수", "누수", "수도관 파열", "침수"]   # 이전 버전 호환용
+
+# 키워드 그룹: 검색 키워드(keywords) + 맥락 단어(contextTerms)
+# - keywords     : 뉴스 검색어. 그룹 단위로 일괄 선택/해제
+# - contextTerms : 기사 맥락 판단용 단어. 기사에 서로 다른 맥락 단어가 minTerms 개 이상 있으면 그 그룹 맥락으로 판단
+#                  (예: '단수 공천'은 '단수' 1개뿐이라 수도 맥락 아님, '단수…급수차 투입'은 2개라 수도 맥락)
+# - scheduled    : 예약(자동) 조회에 포함 여부
+DEFAULT_KEYWORD_GROUPS = [
+    {
+        "id": "water", "name": "수도 그룹 (Water)", "icon": "💧",
+        "description": "단수, 상수도, 파열, 누수, 수질 등 수도 문제",
+        "keywords": ["단수", "상수도", "수도 파열", "상수도관 파열", "누수", "수돗물 유충"],
+        "contextTerms": ["단수", "상수도", "수돗물", "수도관", "상수관", "송수관", "배수관", "급수", "정수장",
+                         "취수장", "배수지", "가압장", "누수", "파열", "관로", "탁수", "적수", "녹물", "흙탕물",
+                         "유충", "수질", "수압", "물 공급", "식수", "병물",
+                         # 후속 보도(의회·책임 공방 등)는 수도 단어가 적어 복합 표현으로 보강
+                         "단수 사태", "단수 사고", "단수 피해", "단수 대란", "단수 장기화"],
+        "minTerms": 2, "scheduled": True,
+    },
+    {
+        "id": "flood", "name": "풍수해 그룹 (Storm/Flood)", "icon": "🌧️",
+        "description": "침수, 범람, 대피, 폭우, 태풍 등 비 피해",
+        "keywords": ["도로 침수", "하천 범람", "주민 대피", "집중 폭우", "강력 태풍", "집중호우"],
+        "contextTerms": ["침수", "범람", "홍수", "호우", "폭우", "태풍", "장마", "강우", "하천", "제방", "수위",
+                         "대피", "산사태", "유실", "저지대", "배수펌프", "빗물", "강풍", "특보"],
+        "minTerms": 2, "scheduled": True,
+    },
+    {
+        "id": "custom", "name": "사용자 설정 키워드", "icon": "⚙️",
+        "description": "환경설정에서 추가한 개별 관심 키워드",
+        "keywords": [], "contextTerms": [], "minTerms": 2, "scheduled": True,
+    },
+]
 
 # 뉴스 제외 키워드: '단수 공천', '단수 임명'처럼 상수도와 무관한 동음이의어 기사를 거른다.
 # 기사에 상수도·수돗물·급수 등 상수도 맥락 단어가 함께 있으면 제외하지 않는다.
@@ -90,7 +122,8 @@ DEFAULT_SETTINGS = {
         "clientId": "",
         "clientSecret": "",
     },
-    "keywords": DEFAULT_KEYWORDS,
+    "keywords": [],              # 모든 그룹 키워드의 합집합 (load 시 자동 계산)
+    "keywordGroups": DEFAULT_KEYWORD_GROUPS,
     "excludeKeywords": DEFAULT_EXCLUDE_KEYWORDS,
     "basins": DEFAULT_BASINS,
     "news": {

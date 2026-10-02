@@ -183,7 +183,8 @@ class Handler(BaseHTTPRequestHandler):
         items = store.load(since.isoformat())
         prev = store.load((since - timedelta(hours=hours)).isoformat(), since.isoformat())
         ids = self._basin_ids(q, s)
-        res = analysis.analyze(items, prev, hours, ids or None, keep_items=keep_items)
+        res = analysis.analyze(items, prev, hours, ids or None, keep_items=keep_items,
+                               groups=s.get("keywordGroups"))
         res.update(hours=hours, since=since.isoformat(), until=now.isoformat(),
                    basins=sorted(ids), store=store.stats())
         return res

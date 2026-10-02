@@ -8,7 +8,7 @@ import shutil
 import sys
 import threading
 
-from .defaults import DEFAULT_SETTINGS
+from .defaults import DEFAULT_KEYWORD_GROUPS, DEFAULT_SETTINGS
 
 # 이전 버전의 저장 위치 (프로그램 폴더 안 data/) — 폴더를 새로 받으면 함께 사라지던 위치
 LEGACY_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
@@ -98,10 +98,38 @@ def load():
     with _lock:
         stored = _read_stored()
         s = _merge(DEFAULT_SETTINGS, stored)
+        if "keywordGroups" not in stored:
+            s["keywordGroups"] = _groups_from_legacy(stored.get("keywords"))
+        s["keywords"] = all_keywords(s)
         for (sec, key), env in ENV_FALLBACK.items():
             if not s[sec].get(key) and os.environ.get(env):
                 s[sec][key] = os.environ[env]
         return s
+
+
+def _groups_from_legacy(old_keywords):
+    """이전 버전(단일 키워드 목록) 설정 → 기본 그룹 + 기존 키워드는 '사용자 설정 키워드' 그룹으로."""
+    groups = copy.deepcopy(DEFAULT_KEYWORD_GROUPS)
+    in_groups = {k for g in groups for k in g["keywords"]}
+    custom = next(g for g in groups if g["id"] == "custom")
+    custom["keywords"] = [k for k in old_keywords or [] if k not in in_groups]
+    return groups
+
+
+def all_keywords(s):
+    """모든 그룹 키워드 (중복 제거, 순서 유지) — 키워드 강조·재난문자 키워드 표시에 사용."""
+    seen, out = set(), []
+    for g in s.get("keywordGroups") or []:
+        for k in g.get("keywords") or []:
+            if k not in seen:
+                seen.add(k)
+                out.append(k)
+    return out
+
+
+def scheduled_keywords(s):
+    """예약(자동) 조회에 쓰는 키워드: scheduled 가 켜진 그룹의 키워드."""
+    return all_keywords({"keywordGroups": [g for g in s.get("keywordGroups") or [] if g.get("scheduled", True)]})
 
 
 def save(settings):
@@ -215,8 +243,35 @@ def apply_update(current, payload):
     if "waterOnly" in alerts:
         s["alerts"]["waterOnly"] = bool(alerts["waterOnly"])
 
-    if "keywords" in payload:
-        s["keywords"] = _str_list(payload["keywords"], max_len=30, limit=100)
+    if "keywordGroups" in payload:
+        groups, used = [], set()
+        for g in payload["keywordGroups"] or []:
+            name = str(g.get("name") or "").strip()[:40]
+            if not name:
+                continue
+            gid = str(g.get("id") or "").strip()
+            if not re.fullmatch(r"[a-z0-9-]{1,40}", gid) or gid in used:
+                gid = _slug("group", used)
+            used.add(gid)
+            groups.append({
+                "id": gid, "name": name,
+                "icon": str(g.get("icon") or "").strip()[:4],
+                "description": str(g.get("description") or "").strip()[:100],
+                "keywords": _str_list(g.get("keywords"), max_len=30, limit=50),
+                "contextTerms": _str_list(g.get("contextTerms"), max_len=20, limit=100),
+                "minTerms": _int(g.get("minTerms"), 2, 1, 5),
+                "scheduled": bool(g.get("scheduled", True)),
+            })
+        s["keywordGroups"] = groups
+    elif "keywords" in payload:
+        # 이전 방식(단일 목록) 요청: '사용자 설정 키워드' 그룹에 반영
+        groups = s.setdefault("keywordGroups", copy.deepcopy(DEFAULT_KEYWORD_GROUPS))
+        custom = next((g for g in groups if g["id"] == "custom"), None)
+        if custom is None:
+            custom = copy.deepcopy(DEFAULT_KEYWORD_GROUPS[-1])
+            groups.append(custom)
+        custom["keywords"] = _str_list(payload["keywords"], max_len=30, limit=100)
+    s["keywords"] = all_keywords(s)
 
     if "excludeKeywords" in payload:
         s["excludeKeywords"] = _str_list(payload["excludeKeywords"], max_len=30, limit=200)

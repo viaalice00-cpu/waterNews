@@ -80,13 +80,18 @@ CONTEXT_TERMS = {
 }
 
 
-def classify(text, dst_se_nm=None):
-    """텍스트에서 분류 id 목록을 반환한다."""
+# 일반 기사에도 흔한 단어 (협상 파열, 세금 누수, 정보 범람, 적수=맞수). 키워드 그룹 맥락이 없으면 분류 근거로 쓰지 않는다
+AMBIGUOUS_TERMS = {"파열", "파손", "누수", "범람", "적수"}
+
+
+def classify(text, dst_se_nm=None, strict=False):
+    """텍스트에서 분류 id 목록을 반환한다. strict=True 면 AMBIGUOUS_TERMS 만으로는 분류하지 않는다."""
     text = text or ""
     found = []
     for cat in CATEGORIES:
         terms_ctx = CONTEXT_TERMS.get(cat["id"])
-        if any(t in text for t in cat["terms"]) or (
+        terms = [t for t in cat["terms"] if not (strict and t in AMBIGUOUS_TERMS)]
+        if any(t in text for t in terms) or (
                 terms_ctx and any(t in text for t in terms_ctx[0]) and any(c in text for c in terms_ctx[1])):
             found.append(cat["id"])
     extra = DST_SE_CATEGORY.get((dst_se_nm or "").strip())
@@ -111,6 +116,24 @@ def exclusion_hits(text, exclude_words):
     if not hits or any(t in text for t in STRONG_WATER_TERMS):
         return []
     return hits
+
+
+def group_context(title, text, groups):
+    """키워드 그룹별 맥락 판단.
+
+    기사에 그룹의 맥락 단어가 서로 다른 것으로 minTerms 개 이상 있으면 해당 그룹 맥락으로 본다.
+    점수는 제목 속 단어 2점, 본문 1점. 반환: 점수 내림차순 [{id, name, icon, terms, score}]
+    """
+    title, text = title or "", text or ""
+    out = []
+    for g in groups or []:
+        terms = [t for t in g.get("contextTerms") or [] if t and t in text]
+        if not terms or len(terms) < max(1, int(g.get("minTerms") or 2)):
+            continue
+        score = sum(2 if t in title else 1 for t in terms)
+        out.append({"id": g["id"], "name": g["name"], "icon": g.get("icon", ""), "terms": terms[:8], "score": score})
+    out.sort(key=lambda x: -x["score"])
+    return out
 
 
 def keyword_hits(text, keywords):
