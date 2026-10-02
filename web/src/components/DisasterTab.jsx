@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, fmtTime, post, todayKst } from "../utils.js";
+import { GroupBadges, GroupFilter, countByGroup, matchGroup } from "./KeywordGroups.jsx";
 import { BasinChecks, CategoryTags, Highlight, RegionTags, StepTag } from "./Tags.jsx";
 
 function Message({ m, keywords, fresh }) {
@@ -10,6 +11,7 @@ function Message({ m, keywords, fresh }) {
       <div className="meta">
         <span className="mono">{fmtTime(m.createdAt)}</span>
         <StepTag step={m.step} />
+        <GroupBadges groups={m.groups || []} contextMatch={m.contextMatch} max={1} />
         {m.disasterType && <span className="tag src">{m.disasterType}</span>}
         <CategoryTags categories={m.categories} />
         {m.keywordHits.map((k) => <span key={k} className="tag kw">#{k}</span>)}
@@ -34,6 +36,7 @@ export default function DisasterTab({ settings, live, status, toast, fresh }) {
   const [waterOnly, setWaterOnly] = useState(true);
   const [unmatched, setUnmatched] = useState(false);
   const [q, setQ] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all");
 
   // 설정이 바뀌면 유역 필터를 활성 유역으로 초기화
   useEffect(() => {
@@ -41,10 +44,13 @@ export default function DisasterTab({ settings, live, status, toast, fresh }) {
   }, [settings]);
 
   const source = mode === "live" ? live : (range?.items || []);
-  const items = useMemo(() => source.filter((m) =>
+  // 그룹 외 조건(유역·관련·검색어)을 먼저 적용 → 그룹별 건수 → 그룹 필터
+  const baseItems = useMemo(() => source.filter((m) =>
     (unmatched || !basinSel.size || m.regions.some((r) => basinSel.has(r.basinId))) &&
     (!waterOnly || m.relevant) &&
     (!q || m.message.includes(q) || m.region.includes(q))), [source, basinSel, waterOnly, unmatched, q]);
+  const groupCounts = useMemo(() => countByGroup(baseItems), [baseItems]);
+  const items = useMemo(() => baseItems.filter((m) => matchGroup(m, groupFilter)), [baseItems, groupFilter]);
 
   const search = async () => {
     const params = new URLSearchParams({ from, to, basins: "", includeUnmatched: "1" });
@@ -103,6 +109,7 @@ export default function DisasterTab({ settings, live, status, toast, fresh }) {
           <input type="search" className="grow" placeholder="내용/지역 검색" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
+      <GroupFilter groups={settings.keywordGroups} value={groupFilter} onChange={setGroupFilter} counts={groupCounts} />
       <p className="muted small">{info}</p>
       {rangeError && mode === "range" && <div className="error-box">{rangeError}</div>}
       <div className="msg-list">

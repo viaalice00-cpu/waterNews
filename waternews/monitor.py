@@ -135,7 +135,7 @@ class Monitor:
         targets = enabled_basin_ids(s)
         out = []
         for it in items:
-            a = disaster.annotate(dict(it), m, s["keywords"])
+            a = disaster.annotate(dict(it), m, s["keywords"], s.get("keywordGroups"))
             a["alert"] = is_alert(a, s, targets)
             out.append(a)
         return out

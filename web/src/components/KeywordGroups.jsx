@@ -136,3 +136,41 @@ export function GroupBadges({ groups, contextMatch, max = 2 }) {
     </span>
   ));
 }
+
+/** 키워드 그룹 필터 (전체 / 그룹별 / 맥락 불명확) — 뉴스 조회·재난문자·사고 분석 공통 */
+export function GroupFilter({ groups, value, onChange, counts }) {
+  const list = groups.filter((g) => g.contextTerms?.length);
+  const n = (k) => (counts && counts[k] != null ? ` ${counts[k]}` : "");
+  return (
+    <div className="row gap wrap ctx-filter">
+      <span className="muted small">키워드 그룹</span>
+      <div className="seg">
+        <button type="button" className={value === "all" ? "active" : ""} onClick={() => onChange("all")}>전체{n("all")}</button>
+        {list.map((g) => (
+          <button type="button" key={g.id} className={value === g.id ? "active" : ""} onClick={() => onChange(g.id)}>
+            {g.icon} {g.name.replace(/\s*\(.*\)$/, "")}{n(g.id)}
+          </button>
+        ))}
+        <button type="button" className={value === "none" ? "active" : ""} onClick={() => onChange("none")}
+          title="어느 그룹의 맥락 단어도 충분하지 않은 항목">맥락 불명확{n("none")}</button>
+      </div>
+    </div>
+  );
+}
+
+/** 항목 목록의 그룹별 건수 {all, none, <id>} */
+export function countByGroup(items) {
+  const c = { all: items.length, none: 0 };
+  for (const it of items) {
+    if (!it.contextMatch) c.none += 1;
+    for (const g of it.groups || []) c[g.id] = (c[g.id] || 0) + 1;
+  }
+  return c;
+}
+
+/** 그룹 필터 적용 */
+export function matchGroup(it, value) {
+  if (value === "all") return true;
+  if (value === "none") return !it.contextMatch;
+  return (it.groups || []).some((g) => g.id === value);
+}

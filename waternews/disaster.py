@@ -11,7 +11,7 @@ import re
 import urllib.parse
 from datetime import date, datetime, timedelta
 
-from .classify import classify, keyword_hits
+from .classify import classify, disaster_group_context, keyword_hits
 from .net import KST, FetchError, http_get
 
 OK_CODES = {"", "0", "00", "000", "200", "INFO-0", "INFO-000"}
@@ -79,9 +79,11 @@ def normalize(raw):
     }
 
 
-def annotate(item, matcher, keywords):
-    """분류, 키워드, 유역/지자체 매칭 정보를 덧붙인다."""
+def annotate(item, matcher, keywords, groups=None):
+    """분류, 키워드, 유역/지자체 매칭, 키워드 그룹 맥락 정보를 덧붙인다."""
     text = item["message"]
+    item["groups"] = disaster_group_context(text, item.get("disasterType"), groups)
+    item["contextMatch"] = bool(item["groups"])
     item["categories"] = classify(text, item.get("disasterType"))
     item["keywordHits"] = keyword_hits(text, keywords)
     item["regions"] = matcher.match_disaster(item["region"]) if matcher else []

@@ -136,6 +136,20 @@ def group_context(title, text, groups):
     return out
 
 
+def disaster_group_context(message, dst_se_nm, groups):
+    """재난문자 그룹 맥락. 문자가 짧아 맥락 단어가 부족하면 재해구분명(DST_SE_NM)으로 보완:
+    맥락 단어에 재해구분명이 포함된 그룹 (예: '수도' → 상수도·수도관 이 있는 수도 그룹, '호우' → 풍수해 그룹)."""
+    hits = group_context(message, message, groups)
+    dst = (dst_se_nm or "").strip()
+    if hits or not dst:
+        return hits
+    for g in groups or []:
+        if any(dst in t for t in g.get("contextTerms") or []):
+            return [{"id": g["id"], "name": g["name"], "icon": g.get("icon", ""),
+                     "terms": [f"재해구분: {dst}"], "score": 1}]
+    return []
+
+
 def keyword_hits(text, keywords):
     text = text or ""
     return [k for k in keywords if k and k in text]

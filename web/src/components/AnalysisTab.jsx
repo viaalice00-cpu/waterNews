@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtTime, post } from "../utils.js";
+import { GroupFilter } from "./KeywordGroups.jsx";
 import { BasinChecks } from "./Tags.jsx";
 
 const WINDOWS = [["24시간", 24], ["3일", 72], ["7일", 168], ["30일", 720]];
@@ -132,6 +133,7 @@ function ClusterCard({ c, open, onToggle, ai, onAi, aiEnabled }) {
 
 export default function AnalysisTab({ settings, active, toast, live, scheduled }) {
   const [hours, setHours] = useState(72);
+  const [group, setGroup] = useState("all");
   const [basinSel, setBasinSel] = useState(() => new Set());
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -148,7 +150,9 @@ export default function AnalysisTab({ settings, active, toast, live, scheduled }
     setLoading(true);
     setError("");
     try {
-      const res = await api(`/api/analysis?${new URLSearchParams({ hours, basins: [...basinSel].join(",") })}`);
+      const params = { hours, basins: [...basinSel].join(",") };
+      if (group !== "all") params.group = group;
+      const res = await api(`/api/analysis?${new URLSearchParams(params)}`);
       setData(res);
       // 서버에 캐시된 AI 브리핑 반영
       setAi((prev) => {
@@ -161,7 +165,7 @@ export default function AnalysisTab({ settings, active, toast, live, scheduled }
     } finally {
       setLoading(false);
     }
-  }, [hours, basinSel]);
+  }, [hours, basinSel, group]);
 
   // 탭이 보일 때, 조건이 바뀔 때, 새 재난문자·예약 뉴스가 들어올 때 다시 분석
   useEffect(() => { if (active) load(); }, [active, load, live.length, scheduled.length]);
@@ -175,7 +179,8 @@ export default function AnalysisTab({ settings, active, toast, live, scheduled }
   const runAi = async (c, refresh) => {
     setAi((p) => ({ ...p, [c.id]: { loading: true } }));
     try {
-      const r = await post("/api/analysis/ai", { clusterId: c.id, hours, basins: [...basinSel].join(","), refresh });
+      const r = await post("/api/analysis/ai", { clusterId: c.id, hours, basins: [...basinSel].join(","),
+        group: group === "all" ? "" : group, refresh });
       setAi((p) => ({ ...p, [c.id]: r.ok ? { text: r.text, model: r.model } : { error: r.message } }));
     } catch (e) {
       setAi((p) => ({ ...p, [c.id]: { error: e.message } }));
@@ -209,6 +214,9 @@ export default function AnalysisTab({ settings, active, toast, live, scheduled }
             <span className="muted small" style={{ marginLeft: 8 }}>유역</span>
             <BasinChecks basins={settings.basins} selected={basinSel} onChange={setBasinSel} />
           </div>
+          <GroupFilter groups={settings.keywordGroups} value={group} onChange={setGroup}
+            counts={data?.groupClusterCounts} />
+          <p className="muted small">키워드 그룹을 고르면 그 그룹 사건만 분석합니다(버튼 숫자 = 사건 수). 사건 단위로 거르므로 맥락 단어가 적은 후속 보도도 해당 사건에 포함됩니다.</p>
         </div>
         {data && (
           <p className="small">
@@ -237,7 +245,7 @@ export default function AnalysisTab({ settings, active, toast, live, scheduled }
             </div>
             {data.groups && (
               <div className="ctx-groups">
-                <ContextBars title="키워드 그룹 맥락" rows={data.groups.map((g) => ({ tag: `${g.icon} ${g.name}`.trim(), count: g.count }))} />
+                <ContextBars title="키워드 그룹 맥락" rows={data.groups.map((g) => ({ tag: `${g.icon} ${g.name.replace(/\s*\(.*\)$/, "")}`.trim(), count: g.count }))} />
                 <p className="muted small">기사·문자가 어느 관심 키워드 그룹의 맥락(맥락 단어 2개 이상)으로 쓰였는지 집계했습니다.</p>
               </div>
             )}

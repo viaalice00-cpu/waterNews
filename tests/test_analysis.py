@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from waternews import ai, analysis, settings, store
+from waternews.classify import disaster_group_context
+from waternews.defaults import DEFAULT_KEYWORD_GROUPS
 from waternews.net import KST
 
 T0 = datetime(2026, 10, 1, 9, 0, tzinfo=KST)
@@ -78,6 +80,35 @@ class ClusterTest(unittest.TestCase):
         han = item(3, "서울 단수", regions=[{"basinId": "han", "basin": "한강유역", "region": "서울특별시"}])
         res = analysis.analyze(JEONGEUP + [han], JEONGEUP[:1], 72, basin_ids={"han"})
         self.assertEqual([c["region"] for c in res["clusters"]], ["서울특별시"])
+
+
+class GroupFilterTest(unittest.TestCase):
+    G = DEFAULT_KEYWORD_GROUPS
+
+    def test_disaster_group_falls_back_to_type(self):
+        # 문자 내용만으로는 수도 맥락 단어가 1개뿐이지만 재해구분 '수도' 로 수도 그룹
+        g = disaster_group_context("[정읍시] 시기동 일대 단수 안내", "수도", self.G)
+        self.assertEqual(g[0]["id"], "water")
+        self.assertEqual(g[0]["terms"], ["재해구분: 수도"])
+        self.assertEqual(disaster_group_context("호우경보 발효 중", "호우", self.G)[0]["id"], "flood")
+        self.assertEqual(disaster_group_context("도심 집회로 교통 혼잡", "교통", self.G), [])
+
+    def test_analyze_by_group(self):
+        flood = item(5, "대전 집중호우로 도로 침수", "하천 범람 우려 주민 대피",
+                     regions=[{**GEUM[0], "region": "대전광역시"}], cats=("flood",))
+        now = T0 + timedelta(hours=30)
+        res = analysis.analyze(JEONGEUP + [flood], [], 72, now=now, groups=self.G, group_id="flood")
+        self.assertEqual([c["region"] for c in res["clusters"]], ["대전광역시"])
+        self.assertEqual(res["collected"]["news"], 1)
+        counts = {g["id"]: g["count"] for g in res["groups"]}      # 분포는 필터 전 기준
+        self.assertEqual(counts["flood"], 1)
+        self.assertEqual(res["groupClusterCounts"], {"water": 1, "flood": 1, "none": 0, "all": 2})
+        self.assertEqual(counts["water"], 2)                       # 기사 단위로는 수도 맥락 2건
+        res = analysis.analyze(JEONGEUP + [flood], [], 72, now=now, groups=self.G, group_id="water")
+        self.assertEqual({c["region"] for c in res["clusters"]}, {"정읍시"})
+        # 사건 단위 필터라 맥락 단어가 부족한 후속 보도(민원·의회 질타)도 사건에 포함
+        self.assertEqual(res["clusters"][0]["counts"]["total"], 5)
+        self.assertEqual(res["collected"]["news"] + res["collected"]["disaster"], 5)
 
 
 class StoreTest(unittest.TestCase):

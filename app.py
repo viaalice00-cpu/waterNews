@@ -184,7 +184,7 @@ class Handler(BaseHTTPRequestHandler):
         prev = store.load((since - timedelta(hours=hours)).isoformat(), since.isoformat())
         ids = self._basin_ids(q, s)
         res = analysis.analyze(items, prev, hours, ids or None, keep_items=keep_items,
-                               groups=s.get("keywordGroups"))
+                               groups=s.get("keywordGroups"), group_id=q.get("group") or None)
         res.update(hours=hours, since=since.isoformat(), until=now.isoformat(),
                    basins=sorted(ids), store=store.stats())
         return res
@@ -198,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(res)
 
     def _ai_briefing(self, body):
-        q = {"hours": body.get("hours")}
+        q = {"hours": body.get("hours"), "group": body.get("group")}
         if "basins" in body:
             q["basins"] = body["basins"]
         res = self._run_analysis(q, keep_items=True)
@@ -256,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
         targets = enabled_basin_ids(s)
         out = []
         for it in items:
-            disaster.annotate(it, matcher, s["keywords"])
+            disaster.annotate(it, matcher, s["keywords"], s.get("keywordGroups"))
             it["alert"] = is_alert(it, s, targets)
             in_target = any(r["basinId"] in ids for r in it["regions"])
             if ids and not in_target and not _bool(q.get("includeUnmatched")):

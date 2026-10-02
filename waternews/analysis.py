@@ -11,7 +11,7 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta
 
-from .classify import CATEGORY_LABELS, group_context
+from .classify import CATEGORY_LABELS, disaster_group_context, group_context
 from .net import now_kst
 
 # ---------------------------------------------------------------- 1. 이해 영역 사전
@@ -122,7 +122,10 @@ def prepare(items, groups=None):
     out = []
     for it in items:
         text = f"{it['title']} {it['body']}"
-        g = group_context(it["title"], text, groups)
+        if it["kind"] == "disaster":   # source = '긴급단계 · 재해구분'
+            g = disaster_group_context(it["body"], it["source"].split(" · ")[-1], groups)
+        else:
+            g = group_context(it["title"], text, groups)
         ctx = context_tags(text)
         types = ctx.get("사고유형") or []
         if not types:  # 사전에 없으면 기본 분류로 대체
@@ -341,13 +344,36 @@ def count_groups(items, groups):
     return rows
 
 
-def analyze(items, prev_items=None, window_hours=72, basin_ids=None, keep_items=False, now=None, groups=None):
-    """분석 결과 전체. basin_ids 가 주어지면 해당 유역 항목만 (지역 미매칭 재난문자 포함 여부는 호출 측 결정)."""
+def _in_group(it, group_id):
+    if not group_id:
+        return True
+    if group_id == "none":
+        return it["group"] is None
+    return bool(it["group"]) and it["group"]["id"] == group_id
+
+
+def analyze(items, prev_items=None, window_hours=72, basin_ids=None, keep_items=False, now=None, groups=None,
+            group_id=None):
+    """분석 결과 전체.
+    basin_ids: 해당 유역 항목만. group_id: 특정 키워드 그룹 맥락 항목만 ('none' = 맥락 불명확).
+    그룹 분포(groups)는 그룹 필터 적용 전 기준으로 집계해 다른 그룹 건수도 함께 보여준다."""
     if basin_ids:
         items = [i for i in items if any(r["basinId"] in basin_ids for r in i["regions"])]
         prev_items = [i for i in (prev_items or []) if any(r["basinId"] in basin_ids for r in i["regions"])]
-    prepared = prepare(items, groups)
-    clusters = cluster(prepared, now=now)
+    prepared_all = prepare(items, groups)
+    clusters = cluster(prepared_all, now=now)
+    # 그룹 필터 버튼용: 그룹별 사건 수 (필터 적용 전)
+    cluster_counts = Counter((c["group"] or {}).get("id") or "none" for c in clusters)
+    cluster_counts["all"] = len(clusters)
+    cluster_counts["none"] += 0          # 0건이어도 버튼에 표시
+    if group_id:
+        # 사건 단위로 거른다: 사건의 대표 그룹(소속 기사 다수의 그룹)이 일치하면 후속 보도까지 함께 포함
+        clusters = [c for c in clusters if _in_group(c, group_id)]
+        prepared = [it for c in clusters for it in c["_items"]]
+        prev_items = [it for it in prepare(prev_items or [], groups) if _in_group(it, group_id)]
+    else:
+        prepared = prepared_all
+    items = prepared
     order = {"높음": 0, "보통": 1, "낮음": 2}
     clusters.sort(key=lambda c: (c["status"] in ("복구 완료", "소강"), order[c["severity"]], -_dt(c["end"]).timestamp()))
     if not keep_items:
@@ -358,7 +384,9 @@ def analyze(items, prev_items=None, window_hours=72, basin_ids=None, keep_items=
                       "disaster": sum(i["kind"] == "disaster" for i in items),
                       "previous": len(prev_items or [])},
         "contexts": count_contexts(prepared),
-        "groups": count_groups(prepared, groups),
+        "groups": count_groups(prepared_all, groups),
+        "groupId": group_id or "",
+        "groupClusterCounts": dict(cluster_counts),
         "clusters": clusters,
         "insights": global_insights(clusters, items, prev_items or [], window_hours),
     }

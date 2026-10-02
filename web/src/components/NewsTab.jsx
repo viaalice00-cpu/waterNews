@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CAT, SRC, api, daysAgo, downloadCsv, fmtTime, splitList, todayKst } from "../utils.js";
-import { GroupBadges, KeywordGroupPicker } from "./KeywordGroups.jsx";
+import { GroupBadges, GroupFilter, KeywordGroupPicker, countByGroup, matchGroup } from "./KeywordGroups.jsx";
 import { BasinChecks, CategoryTags, Highlight, RegionTags } from "./Tags.jsx";
 
 const QUICK = [["오늘", 0], ["3일", 2], ["7일", 6], ["30일", 29]];
@@ -50,21 +50,12 @@ export default function NewsTab({ settings }) {
   const items = useMemo(() => {
     let list = result?.items || [];
     if (!showExcluded) list = list.filter((n) => !n.excludedBy?.length);
-    if (groupFilter === "none") list = list.filter((n) => !n.contextMatch && !n.excludedBy?.length);
-    else if (groupFilter !== "all") list = list.filter((n) => n.groups?.some((g) => g.id === groupFilter));
+    if (groupFilter !== "all") list = list.filter((n) => !n.excludedBy?.length && matchGroup(n, groupFilter));
     return waterOnly ? list.filter((n) => n.categories.length || n.excludedBy?.length) : list;
   }, [result, waterOnly, showExcluded, groupFilter]);
 
   // 결과의 그룹 맥락 분포 (필터 버튼에 건수 표시)
-  const groupCounts = useMemo(() => {
-    const c = { none: 0 };
-    for (const n of result?.items || []) {
-      if (n.excludedBy?.length) continue;
-      if (!n.contextMatch) c.none += 1;
-      for (const g of n.groups || []) c[g.id] = (c[g.id] || 0) + 1;
-    }
-    return c;
-  }, [result]);
+  const groupCounts = useMemo(() => countByGroup((result?.items || []).filter((n) => !n.excludedBy?.length)), [result]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -155,21 +146,7 @@ export default function NewsTab({ settings }) {
         {loading ? "구글·네이버 뉴스를 조회하고 있습니다…" : result &&
           `${result.start} ~ ${result.end} · 키워드 ${result.keywords.join(", ")} · 요청 ${result.requestCount}회 · 수집 ${result.rawCount}건 → 기간 밖 ${result.dropped?.date ?? 0}건 · 지역 불일치 ${result.dropped?.region ?? 0}건 · 제외 ${result.excludedCount}건 → 표시 ${items.length}건`}
       </p>
-      {result && (
-        <div className="row gap wrap ctx-filter">
-          <span className="muted small">맥락 그룹</span>
-          <div className="seg">
-            <button type="button" className={groupFilter === "all" ? "active" : ""} onClick={() => setGroupFilter("all")}>전체</button>
-            {settings.keywordGroups.filter((g) => g.contextTerms?.length).map((g) => (
-              <button type="button" key={g.id} className={groupFilter === g.id ? "active" : ""} onClick={() => setGroupFilter(g.id)}>
-                {g.icon} {g.name.replace(/\s*\(.*\)$/, "")} {groupCounts[g.id] || 0}
-              </button>
-            ))}
-            <button type="button" className={groupFilter === "none" ? "active" : ""} onClick={() => setGroupFilter("none")}
-              title="검색어는 들어 있지만 그룹 맥락 단어가 부족한 기사 (예: '협상 파열', '단수 공천')">맥락 불명확 {groupCounts.none}</button>
-          </div>
-        </div>
-      )}
+      {result && <GroupFilter groups={settings.keywordGroups} value={groupFilter} onChange={setGroupFilter} counts={groupCounts} />}
       {error && <div className="error-box">{error}</div>}
       {result?.errors.map((e) => <div key={e} className="error-box">{e}</div>)}
 
