@@ -73,12 +73,21 @@ def disaster_pattern(region):
     return re.compile(re.escape(name))
 
 
+# 단독으로는 상수도와 무관할 수 있어, 수돗물·수도 맥락 단어와 함께 나올 때만 상수도 사고로 보는 단어
+CONTEXT_TERMS = {
+    "water_accident": (["유충", "이물질", "깔따구"],
+                       ["수돗물", "정수장", "상수도", "수도꼭지", "수도관", "배수지", "정수", "급수", "음용"]),
+}
+
+
 def classify(text, dst_se_nm=None):
     """텍스트에서 분류 id 목록을 반환한다."""
     text = text or ""
     found = []
     for cat in CATEGORIES:
-        if any(t in text for t in cat["terms"]):
+        terms_ctx = CONTEXT_TERMS.get(cat["id"])
+        if any(t in text for t in cat["terms"]) or (
+                terms_ctx and any(t in text for t in terms_ctx[0]) and any(c in text for c in terms_ctx[1])):
             found.append(cat["id"])
     extra = DST_SE_CATEGORY.get((dst_se_nm or "").strip())
     if extra and extra not in found:

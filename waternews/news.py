@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 
 from .classify import classify, exclusion_hits, keyword_hits
-from .net import KST, FetchError, http_get
+from .net import KST, FetchError, http_get, now_kst
 
 GOOGLE_RSS = "https://news.google.com/rss/search"
 NAVER_NEWS = "https://openapi.naver.com/v1/search/news.json"
@@ -34,12 +34,18 @@ def _q(term):
 
 
 # ---------------------------------------------------------------- Google News
-def google_query(keyword, region_terms, start, end):
+def google_query(keyword, region_terms, start, end, today=None):
     q = _q(keyword)
     if region_terms:
         q += " (" + " OR ".join(_q(t) for t in region_terms) + ")"
-    # before: 는 해당일 미포함이므로 종료일+1
-    q += f" after:{start.isoformat()} before:{(end + timedelta(days=1)).isoformat()}"
+    today = today or now_kst().date()
+    if end >= today:
+        # 오늘까지 조회: RSS 는 after:/before: 를 무시하고 관련도 높은 옛 기사를 주는 경우가 많아
+        # 최근 N일 연산자 when: 을 사용 (RSS 에서 안정적으로 동작)
+        q += f" when:{(today - start).days + 1}d"
+    else:
+        # 과거 기간: before: 는 해당일 미포함이므로 종료일+1
+        q += f" after:{start.isoformat()} before:{(end + timedelta(days=1)).isoformat()}"
     return q
 
 
@@ -152,10 +158,14 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
                 errors.append(f"{src} '{kw}' 조회 실패: {e}")
 
     merged = {}
+    dropped = {"date": 0, "region": 0}
+    out_dates = []
     for it in raw:
         if it["publishedAt"]:
             d = datetime.fromisoformat(it["publishedAt"]).date()
             if d < start or d > end:
+                dropped["date"] += 1
+                out_dates.append(d)
                 continue
         key = _norm_title(it["title"])
         if not key:
@@ -182,6 +192,7 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
         it["keywordHits"] = keyword_hits(text, keywords)
         it["regions"] = matcher.match_news(text) if matcher else []
         if matcher and not it["regions"] and not include_unmatched:
+            dropped["region"] += 1
             continue
         # 제외된 기사도 화면에서 확인할 수 있도록 표시만 하고 목록에는 남긴다
         it["excludedBy"] = exclusion_hits(text, exclude_words)
@@ -190,5 +201,11 @@ def search_news(settings, keywords, start, end, sources, matcher=None,
             excluded += 1
         items.append(it)
     items.sort(key=lambda x: x["publishedAt"], reverse=True)
+    if dropped["date"] and not items:   # 결과가 전부 기간 밖일 때만 안내 (네이버 마지막 페이지의 옛 기사는 정상)
+        errors.append(
+            f"수집된 기사 중 {dropped['date']}건이 조회 기간 밖이라 제외됐습니다 "
+            f"(해당 기사 발행일 {min(out_dates)} ~ {max(out_dates)}). 검색 엔진이 관련도 높은 과거 기사를 "
+            "반환한 경우로, 기간을 넓히거나 키워드를 구체적으로(예: '수돗물 유충') 입력해 보세요.")
     return {"items": items, "errors": errors, "requestCount": len(tasks), "rawCount": len(raw),
+            "dropped": dropped,
             "excludedCount": excluded}

@@ -97,6 +97,10 @@ class ClassifyTest(unittest.TestCase):
         self.assertTrue(disaster_pattern("세종특별자치시").search("세종특별자치시"))
         self.assertFalse(disaster_pattern("광주광역시").search("경기도 성남시"))
 
+    def test_larvae_needs_water_context(self):
+        self.assertIn("water_accident", classify("정수장 유충 발견, 위생관리 구멍"))
+        self.assertEqual(classify("털진드기 유충이 매개하는 쯔쯔가무시증 주의"), [])
+
     def test_categories(self):
         self.assertEqual(classify("송수관 파열로 단수"), ["outage", "water_accident"])
         self.assertEqual(classify("호우경보 발효"), ["flood"])
@@ -179,6 +183,21 @@ class NewsTest(unittest.TestCase):
     def test_google_query(self):
         q = news.google_query("수도관 파열", ["정읍", "완주군"], date(2026, 9, 1), date(2026, 9, 30))
         self.assertEqual(q, '"수도관 파열" (정읍 OR 완주군) after:2026-09-01 before:2026-10-01')
+
+    def test_google_query_recent_uses_when(self):
+        q = news.google_query("유충", [], date(2026, 9, 29), date(2026, 10, 2), today=date(2026, 10, 2))
+        self.assertEqual(q, "유충 when:4d")
+
+    def test_out_of_range_articles_are_reported(self):
+        old = format_datetime(datetime(2020, 7, 15, 10, 0, tzinfo=KST))
+        rss = (f"<rss><channel><item><title>인천 수돗물 유충 사태 - A</title><link>https://g/1</link>"
+               f"<pubDate>{old}</pubDate><source url='x'>A</source></item></channel></rss>").encode()
+        s = json.loads(json.dumps(DEFAULT_SETTINGS))
+        res = news.search_news(s, ["유충"], date(2026, 9, 29), date(2026, 10, 2), ["google"],
+                               getter=lambda *a, **k: (200, rss))
+        self.assertEqual(res["items"], [])
+        self.assertEqual(res["dropped"]["date"], 1)
+        self.assertTrue(any("2020-07-15" in e for e in res["errors"]))
 
     def test_search_merges_and_filters(self):
         pub = format_datetime(datetime(2026, 9, 30, 10, 0, tzinfo=KST))

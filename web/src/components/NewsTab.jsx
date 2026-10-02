@@ -133,7 +133,7 @@ export default function NewsTab({ settings }) {
 
       <p className="muted small">
         {loading ? "구글·네이버 뉴스를 조회하고 있습니다…" : result &&
-          `${result.start} ~ ${result.end} · 키워드 ${result.keywords.join(", ")} · 요청 ${result.requestCount}회 · 수집 ${result.rawCount}건 → 제외 ${result.excludedCount}건 → 표시 ${items.length}건`}
+          `${result.start} ~ ${result.end} · 키워드 ${result.keywords.join(", ")} · 요청 ${result.requestCount}회 · 수집 ${result.rawCount}건 → 기간 밖 ${result.dropped?.date ?? 0}건 · 지역 불일치 ${result.dropped?.region ?? 0}건 · 제외 ${result.excludedCount}건 → 표시 ${items.length}건`}
       </p>
       {error && <div className="error-box">{error}</div>}
       {result?.errors.map((e) => <div key={e} className="error-box">{e}</div>)}

@@ -118,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------ 라우팅
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
-        q = {k: v[-1] for k, v in urllib.parse.parse_qs(url.query).items()}
+        q = {k: v[-1] for k, v in urllib.parse.parse_qs(url.query, keep_blank_values=True).items()}
         try:
             if url.path == "/api/settings":
                 return self._json(self._settings_view(load_settings() if DEMO else settings_mod.load()))
